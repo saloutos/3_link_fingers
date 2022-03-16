@@ -8,7 +8,7 @@ Serial pc(USBTX, USBRX, 921600);
 DigitalOut led(LED1);
 
 I2C i2c(PF_0, PF_1); //(PB_9, PB_8); // SDA, SCL
-//SPI spi(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
+SPI spi(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
 DigitalOut cs(PE_4);
 
 // variables for encoder -> distance calculation
@@ -44,8 +44,8 @@ int main() {
     
     i2c.frequency(400000); // set bus freq
     
-//    spi.frequency(1000000); // set bus freq
-//    spi.format(16,0); // try 12 bits? sensor is 12 bits, SPI mode 2 (inverted clock, sampled on falling edge)
+   spi.frequency(1000000); // set bus freq
+   spi.format(16,0); // try 12 bits? sensor is 12 bits, SPI mode 2 (inverted clock, sampled on falling edge)
     
     // perform any setup for the sensor here     
     tof.begin(&i2c);
@@ -76,23 +76,23 @@ int main() {
 //        samp2 = t2.read_us();
         
         
-//        old_enc_pos = new_enc_pos;
-//        cs = 0;
-//        new_enc_pos = spi.write(0xFFFF);
-//        cs = 1;
-//        new_enc_pos = (new_enc_pos>>3);
-//        if ((new_enc_pos>3000)&&(old_enc_pos<1000)){
-//            num_revolutions -= 1;
-//        } else if ((new_enc_pos<1000)&&(old_enc_pos>3000)){
-//            num_revolutions += 1;
-//        }
-//        position = -(((float)new_enc_pos)*counts_to_mm + ((float)num_revolutions)*revs_to_mm - starting_position);
+       old_enc_pos = new_enc_pos;
+       cs = 0;
+       new_enc_pos = spi.write(0xFFFF);
+       cs = 1;
+       new_enc_pos = (new_enc_pos>>3);
+       if ((new_enc_pos>3000)&&(old_enc_pos<1000)){
+           num_revolutions -= 1;
+       } else if ((new_enc_pos<1000)&&(old_enc_pos>3000)){
+           num_revolutions += 1;
+       }
+       position = -(((float)new_enc_pos)*counts_to_mm + ((float)num_revolutions)*revs_to_mm - starting_position);
         
         // print data
-        pc.printf("%f, %d\n\r", t3.read(), range);
+        // pc.printf("%f, %d\n\r", t3.read(), range);
 //        pc.printf("%d, %f, %d, %d\n\r", range, light, samp1, samp2);
 //        pc.printf("prox: %d, raw_enc: %d, pos: %.2f\n\r", prox, new_enc_pos, position); //new_enc_pos); //(enc_data>>3));
-//        pc.printf("%d, %.2f\n\r", prox, position);
+        pc.printf("%f, %d, %.2f\n\r", t3.read(), range, position);
         
         while (t.read()<loop_time) {;}
         led = !led;
