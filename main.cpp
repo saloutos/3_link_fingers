@@ -60,6 +60,15 @@ uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
 
 // initialize dynamixel data
+#define WAIT_TIME_MS 1
+#define LEN 100 // should be 34? = 5*7-1
+RawSerial uart(D1, D0);
+DigitalInOut RTS(D2);
+DigitalOut dbg(LED1);
+volatile uint8_t waitForReceive = 0;
+volatile uint8_t nextReload = 15;
+uint8_t rx_buffer[LEN];
+
 uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
 int16_t dxl_pos[6];
 uint8_t num_IDs = 6;
@@ -186,10 +195,18 @@ int main() {
 
     pc.printf("Initializing Dynamixels.\n\r");
     
+    wait_us(300);
+    RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
+    RTS.mode(OpenDrainNoPull);
+    RTS.output();
+    uart.baud(1000000);
+    RTS = 0;
+    wait_us(100);
+
     XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
     // Enable dynamixels and set control mode...individual version
     for(int i=0; i<6; i++){
-        pc.printf("Motor %d.\n\r",i+1);
+        pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
         dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
         dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
         dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
