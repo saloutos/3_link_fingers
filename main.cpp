@@ -13,12 +13,13 @@
 Serial pc(USBTX, USBRX, 460800);
 DigitalOut led(LED1);
 
-float loop_time = 0.05f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+// full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // dynamixels
 XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
 uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
-int16_t dxl_pos[6];
+int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
 
 // Left finger force sensor
@@ -272,21 +273,22 @@ int main() {
         samp2 = t2.read_us();
 
         t2.reset();
-        for(int i=0; i<num_IDs; i++){
-            dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
-        }
-        samp3 = t2.read_us();
-
-        // dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
+        // for(int i=0; i<num_IDs; i++){
+        //     dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
+        // }
+        
+        dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
         // convert states
         // for(int i=0; i<num_IDs; i++){
         //     converted_position[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
         // }
+        samp3 = t2.read_us();
 
         t2.reset();
         // printing data takes about 900us at baud of 460800
-        pc.printf("%.2f, %d, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4, samp5);
-        pc.printf("%d, %d, %d, %d, %d, %d, %d\n\r", range[3], range[4], range[5], range[6], range[0], range[1], range[2]);
+        // pc.printf("%.2f, %d, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4, samp5);
+        // pc.printf("%.2f, %d\n\r",t3.read(), samp5);
+        pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[3], range[4], range[5], range[6], range[0], range[1], range[2]);
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5]);  
         pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
