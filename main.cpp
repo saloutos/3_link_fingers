@@ -4,41 +4,72 @@
 #include "string.h"
 #include "VL6180X.h"
 #include "dynamixel_XL330.h"
+#include "ForceSensor.h"
+#include "bmp3_funcs.h"
+#include "bmp3.h"
+#include "neural_nets.h"
+#include "math_ops.h"
 
-Serial pc(USBTX, USBRX, 921600);
+Serial pc(USBTX, USBRX, 460800);
 DigitalOut led(LED1);
 
+float loop_time = 0.05f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+
+
+// Left finger force sensor
+SPI spi1(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
+DigitalOut cs01(PD_4);
+DigitalOut cs11(PD_5);
+DigitalOut cs21(PD_6); 
+DigitalOut cs31(PD_7); 
+DigitalOut cs41(PD_1);
+DigitalOut cs51(PD_0); 
+DigitalOut cs61(PG_0);
+DigitalOut cs71(PG_12);
+extern NeuralNet sensor31;
+ForceSensor left_finger(1, &sensor31); // class is modified to use new digital outs and spi
+
+// Right finger force sensor
+SPI spi2(PF_9, PF_8, PF_7); // MOSI, MISO, SCK
+DigitalOut cs02(PF_13);
+DigitalOut cs12(PF_12);
+DigitalOut cs22(PD_10); 
+DigitalOut cs32(PG_7); 
+DigitalOut cs42(PG_4);
+DigitalOut cs52(PG_5); 
+DigitalOut cs62(PG_8);
+DigitalOut cs72(PF_11);
+// initialize neural net structs
+extern NeuralNet sensor28;
+ForceSensor right_finger(2, &sensor28); // class is modified to use new digital outs and spi
+
+// ToF sensor i2c busses
 I2C i2c1(PF_0, PF_1); //(PB_9, PB_8); // SDA, SCL
 I2C i2c2(PD_13, PD_12); 
-
 // initialize sensors
-VL6180X tof1;
-VL6180X tof2;
-VL6180X tof3;
-VL6180X tof4;
-VL6180X tof5;
-VL6180X tof6;
-int range[6];
-int range_status[6];
+VL6180X tof1; // right finger inner
+VL6180X tof2; // right finger forward
+VL6180X tof3; // right finger outer
+VL6180X tof4; // left finger outer
+VL6180X tof5; // left finger forward
+VL6180X tof6; // left finger inner
+VL6180X tof7; // palm
+int range[7];
+int range_status[7];
 uint8_t MUX_ADDR = (0x70<<1);
-uint8_t dxl_ID[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
+uint16_t range_period = 30;
+
+// initialize dynamixel data
+uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
 int16_t dxl_pos[6];
+uint8_t num_IDs = 6;
 
-#define WAIT_TIME_MS 1
-#define LEN 100 // should be 34? = 5*7-1
-RawSerial uart(D1, D0);
-DigitalInOut RTS(D2);
-DigitalOut dbg(LED1);
-volatile uint8_t waitForReceive = 0;
-volatile uint8_t nextReload = 15;
-uint8_t rx_buffer[LEN];
-
+// timer stuff
 Timer t;
-float loop_time = 0.05; // 200hz is probably maximum sample rate since that is pressure sensor rate too
-uint16_t range_period = 20;
 Timer t2;
-int samp1, samp2, samp3;
 Timer t3;
+int samp0, samp1, samp2, samp3, samp4;
+
 
 void set_mux1(uint8_t channel){
     // write to mux address
@@ -134,7 +165,18 @@ int main() {
     wait_us(100);
     tof6.startRangeContinuous(range_period);
     wait_us(1000);
-    
+    pc.printf("Sensor 7...\n\r");
+    set_mux2(1); // channel 1 on mux
+    wait_us(100);
+    if(!tof7.begin(&i2c2)){
+        pc.printf("Sensor 7 init failed.\n\r");
+    }
+    wait_us(100);
+    tof7.stopRangeContinuous();
+    wait_us(100);
+    tof7.startRangeContinuous(range_period);
+    wait_us(1000);
+
     t.reset();
     t.start();
     t2.reset();
@@ -143,35 +185,47 @@ int main() {
     t3.start(); 
 
     pc.printf("Initializing Dynamixels.\n\r");
-
-    wait_us(300);
-    RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
-    RTS.mode(OpenDrainNoPull);
-    RTS.output();
-    uart.baud(1000000);
-    RTS = 0;
-    wait_us(100);
     
     XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
+    // Enable dynamixels and set control mode...individual version
     for(int i=0; i<6; i++){
-       
-        dxl_bus.SetTorqueEn(dxl_ID[i],0x00);    
-        dxl_bus.SetRetDelTime(dxl_ID[i],0x32); // 4us delay time?
-        dxl_bus.SetControlMode(dxl_ID[i], POSITION_CONTROL);
+        pc.printf("Motor %d.\n\r",i+1);
+        dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
+        dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
+        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
         wait_us(100);
-        dxl_bus.TurnOnLED(dxl_ID[i], 0x01);
-        dxl_bus.TurnOnLED(dxl_ID[i], 0x00); // turn off LED
+        dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
+        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
         //dxl_bus.SetTorqueEn(dxl_ID[i],0x01); //to be able to move 
         wait_us(100);
     } 
     
+    pc.printf("Initializing force sensors.\n\r");
+
+    left_finger.Initialize();
+    left_finger.Calibrate();
+    wait_us(10000);
+    right_finger.Initialize();
+    right_finger.Calibrate();
+    wait_us(10000);
+
 
     pc.printf("Starting...\n\r");
     while (1) {
 
         t.reset();
                     
-        // get data from TOF sensor and encoder
+        // get force sensor data
+        t2.reset();
+        left_finger.Sample();
+        left_finger.Evaluate();
+        wait_us(10);
+        right_finger.Sample();
+        right_finger.Evaluate();
+        wait_us(10);
+        samp0 = t2.read_us();
+
+        // get data from TOF sensor
         t2.reset();
         // reading all of the continuous range measurements takes about 2ms with current wait times
         set_mux1(2);
@@ -213,19 +267,36 @@ int main() {
         wait_us(10);
         range_status[5] = tof6.readRangeStatus();
         wait_us(10);
-
+        set_mux2(1);
+        wait_us(10);
+        range[6] = tof7.readRangeResult();
+        wait_us(10);
+        range_status[6] = tof7.readRangeStatus();
+        wait_us(10);
         samp2 = t2.read_us();
 
-        for(int i=0; i<6; i++){
-            dxl_pos[i]= dxl_bus.GetPosition(dxl_ID[i]);
-        }
+        // t2.reset();
+        // for(int i=0; i<num_IDs; i++){
+        //     dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
+        // }
+        // samp3 = t2.read_us();
+
+        // dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
+        // convert states
+        // for(int i=0; i<num_IDs; i++){
+        //     converted_position[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
+        // }
 
         t2.reset();
         // printing data takes about 900us at baud of 460800
-        // pc.printf("%.2f, %d, %d, %d\n\r",t3.read(), samp1, samp2, samp3);
-        pc.printf("%.3f, %d, %d, %d, %d, %d, %d,  %d, %d, %d, %d, %d, %d \n\r\n\r",t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-        // pc.printf("%d, %d, %d, %d, %d, %d\n\r\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5]);                  
-        samp3 = t2.read_us();
+        pc.printf("%.2f, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4);
+        pc.printf("%d, %d, %d, %d, %d, %d, %d\n\r", range[3], range[4], range[5], range[6], range[0], range[1], range[2]);
+        // pc.printf("%d, %d, %d, %d, %d, %d\n\r\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5]);  
+        pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
+
+        samp4 = t2.read_us();
         wait_us(10);
 
         while (t.read()<loop_time) {;}
