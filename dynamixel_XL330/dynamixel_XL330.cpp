@@ -4,13 +4,13 @@ XL330_bus::XL330_bus(uint32_t baud, PinName tx, PinName rx, PinName rts): sbus(t
 {
     baudrate = baud;
     return_delay = 0.0005f; // defaults to 500us
-    wait_ms(300);
+    wait_us(300000);
     RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
     rtswitch.mode(OpenDrainNoPull);
     rtswitch.output();
     sbus.baud(baudrate);
     rtswitch = 0;
-    wait_ms(300); // todo: how long does this need to be?
+    wait_us(300000); // todo: how long does this need to be?
     
     // todo: pass PC serial to init functions? might be okay
     
@@ -313,7 +313,7 @@ void XL330_bus::SetID(uint8_t id, uint8_t newId)
     parameter[0] = newId;
 
     SetSomething(id, XL_ID_ADDRESS, parameter, 1);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint8_t XL330_bus::GetID(uint8_t id)
@@ -343,7 +343,7 @@ void XL330_bus::SetBaudRate(uint8_t id, uint8_t baudrt)
             break;
     }
 
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint8_t XL330_bus::GetBaudRate(uint8_t id)
@@ -357,7 +357,7 @@ void XL330_bus::SetRetDelTime(uint8_t id,uint8_t time)
     parameter[0] = time;
 
     SetSomething(id, RETURN_DELAY_TIME, parameter, 1);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
     return_delay = (((float)time)*2.0f)/1000000.0f;
     
 }
@@ -374,7 +374,7 @@ void XL330_bus::SetControlMode(uint8_t id, uint8_t mode)
     parameter[0] = mode;
     
     SetSomething(id, OPERATING_MODE, parameter, 1);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint8_t XL330_bus::GetControlMode(uint8_t id)
@@ -388,7 +388,7 @@ void XL330_bus::SetTempLim(uint8_t id, uint8_t temp)
     parameter[0] = temp;
 
     SetSomething(id, TEMPERATURE_LIMIT, parameter, 1);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint8_t XL330_bus::GetTempLim(uint8_t id)
@@ -403,7 +403,7 @@ void XL330_bus::SetCurrentLimit(uint8_t id, uint16_t current)
     parameter[1] = SHIFT_TO_MSB(current);
 
     SetSomething(id, CURRENT_LIMIT, parameter, 2);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint16_t XL330_bus::GetCurrentLimit(uint8_t id)
@@ -417,7 +417,7 @@ void XL330_bus::SetRetLev(uint8_t id, uint8_t level)
     parameter[0] = level;
 
     SetSomething(id, STATUS_RET_LVL, parameter, 1);
-    wait_ms(200);   //Waits for the value to be written in EEPROM
+    wait_us(200000);   //Waits for the value to be written in EEPROM
 }
 
 uint8_t XL330_bus::GetRetLev(uint8_t id)

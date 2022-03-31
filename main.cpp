@@ -15,6 +15,11 @@ DigitalOut led(LED1);
 
 float loop_time = 0.05f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
 
+// dynamixels
+XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
+uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
+int16_t dxl_pos[6];
+uint8_t num_IDs = 6;
 
 // Left finger force sensor
 SPI spi1(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
@@ -59,26 +64,11 @@ int range_status[7];
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
 
-// initialize dynamixel data
-#define WAIT_TIME_MS 1
-#define LEN 100 // should be 34? = 5*7-1
-RawSerial uart(D1, D0);
-DigitalInOut RTS(D2);
-DigitalOut dbg(LED1);
-volatile uint8_t waitForReceive = 0;
-volatile uint8_t nextReload = 15;
-uint8_t rx_buffer[LEN];
-
-uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
-int16_t dxl_pos[6];
-uint8_t num_IDs = 6;
-
 // timer stuff
 Timer t;
 Timer t2;
 Timer t3;
-int samp0, samp1, samp2, samp3, samp4;
-
+int samp0, samp1, samp2, samp3, samp4, samp5;
 
 void set_mux1(uint8_t channel){
     // write to mux address
@@ -107,6 +97,21 @@ int main() {
     i2c1.frequency(400000); // set bus freq
     i2c2.frequency(400000); 
     
+    pc.printf("Initializing Dynamixels.\n\r");
+
+    // Enable dynamixels and set control mode...individual version
+    for(int i=0; i<6; i++){
+        pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
+        dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
+        dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
+        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
+        wait_us(100);
+        dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
+        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
+        // dxl_bus.SetTorqueEn(dxl_ID[i],0x01); //to be able to move 
+        wait_us(100);
+    } 
+
     // perform any setup for the sensor here
     pc.printf("Sensor 1...\n\r");
     set_mux1(2); // channel 2 on mux 
@@ -186,39 +191,6 @@ int main() {
     tof7.startRangeContinuous(range_period);
     wait_us(1000);
 
-    t.reset();
-    t.start();
-    t2.reset();
-    t2.start();
-    t3.reset();
-    t3.start(); 
-
-    pc.printf("Initializing Dynamixels.\n\r");
-    
-    wait_us(300);
-    RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
-    RTS.mode(OpenDrainNoPull);
-    RTS.output();
-    uart.baud(1000000);
-    RTS = 0;
-    wait_us(100);
-
-    XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
-    // Enable dynamixels and set control mode...individual version
-    for(int i=0; i<6; i++){
-        pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
-        dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
-        dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
-        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
-        wait_us(100);
-        dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
-        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
-        //dxl_bus.SetTorqueEn(dxl_ID[i],0x01); //to be able to move 
-        wait_us(100);
-    } 
-    
-    pc.printf("Initializing force sensors.\n\r");
-
     left_finger.Initialize();
     left_finger.Calibrate();
     wait_us(10000);
@@ -226,8 +198,15 @@ int main() {
     right_finger.Calibrate();
     wait_us(10000);
 
-
     pc.printf("Starting...\n\r");
+
+    t.reset();
+    t.start();
+    t2.reset();
+    t2.start();
+    t3.reset();
+    t3.start(); 
+
     while (1) {
 
         t.reset();
@@ -292,11 +271,11 @@ int main() {
         wait_us(10);
         samp2 = t2.read_us();
 
-        // t2.reset();
-        // for(int i=0; i<num_IDs; i++){
-        //     dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
-        // }
-        // samp3 = t2.read_us();
+        t2.reset();
+        for(int i=0; i<num_IDs; i++){
+            dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
+        }
+        samp3 = t2.read_us();
 
         // dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
         // convert states
@@ -306,7 +285,7 @@ int main() {
 
         t2.reset();
         // printing data takes about 900us at baud of 460800
-        pc.printf("%.2f, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4);
+        pc.printf("%.2f, %d, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4, samp5);
         pc.printf("%d, %d, %d, %d, %d, %d, %d\n\r", range[3], range[4], range[5], range[6], range[0], range[1], range[2]);
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5]);  
         pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
@@ -314,6 +293,7 @@ int main() {
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
 
         samp4 = t2.read_us();
+        samp5 = t.read_us();
         wait_us(10);
 
         while (t.read()<loop_time) {;}
