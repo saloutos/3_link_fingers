@@ -13,14 +13,21 @@
 Serial pc(USBTX, USBRX, 460800);
 DigitalOut led(LED1);
 
-float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+float loop_time = 0.02f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // dynamixels
 XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
 uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
+float dxl_offsets[] = {3.916f, 3.898f, 3.901f, 5.513f, 2.304f, 2.404f};
 int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
+float pulse_to_rad = (2.0f*3.14159f)/4096.0f; // = 0.001534
+float conv_pos[6];
+float default_pos[] = {0.7f, -1.0f, 0.3f, -0.7f, 1.0f, -0.3f}; // nominal joint positions
+// float default_pos[] = {0.9f, -0.9f, -0.7f, -0.9f, 0.9f, 0.7f}; // nominal joint positions
+float new_pos[6];
+uint32_t des_pos[6];
 
 // Left finger force sensor
 SPI spi1(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
@@ -61,6 +68,7 @@ VL6180X tof5; // left finger forward
 VL6180X tof6; // left finger inner
 VL6180X tof7; // palm
 int range[7];
+float range_m[7]; // range in m
 int range_status[7];
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
@@ -71,6 +79,39 @@ Timer t2;
 Timer t3;
 int samp0, samp1, samp2, samp3, samp4, samp5;
 
+// finger kinematics
+float l1 = 0.04f;
+float l2 = 0.05f;
+float l3 = 0.03f;
+float lout = 0.0125f;
+float lfw = 0.015f;
+float lin = 0.0125f;
+float l_yoff = 0.0475f;
+float r_yoff = -0.0475f;
+float c_xoff = -0.025f;
+float p[2][3];
+float v[2][3];
+float etip_left[3][2]; // out, fw, in
+float etip_right[3][2]; // out, fw, in
+float pstar[2][2]; // desired change in end-effector position
+float prox_thresh = 0.030f; // proximity threshold of 20mm
+int left_ik = 0;
+int right_ik = 0;
+float link3_angles[] = {0.0f, 0.0f}; // [left,right] in world reference frame
+float x2, y2, l4, gamma, alpha1, alpha2;  
+
+
+// takes joint angles and populates finger kinematics x,y,theta
+// void kinematics(){
+//
+// }
+
+// takes finger number, finger pose (x,y,theta) and returns corresponding joint angles
+// void inverse_kinematics(){
+// 
+// }
+
+// Helper functions for i2c
 void set_mux1(uint8_t channel){
     // write to mux address
     char buffer[1];
@@ -107,9 +148,9 @@ int main() {
         dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
         dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
         wait_us(100);
-        dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
+        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
         // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
-        // dxl_bus.SetTorqueEn(dxl_ID[i],0x01); //to be able to move 
+        dxl_bus.SetTorqueEn(dxl_IDs[i], 0x01); //to be able to move 
         wait_us(100);
     } 
 
@@ -225,6 +266,7 @@ int main() {
         // get data from TOF sensor
         t2.reset();
         // reading all of the continuous range measurements takes about 2ms with current wait times
+        // TODO: could remove range status reading to speed up?
         set_mux1(2);
         wait_us(10);
         range[0] = tof1.readRangeResult();
@@ -272,27 +314,133 @@ int main() {
         wait_us(10);
         samp2 = t2.read_us();
 
-        t2.reset();
-        // for(int i=0; i<num_IDs; i++){
-        //     dxl_pos[i]= dxl_bus.GetPosition(dxl_IDs[i]);
-        // }
-        
+        // convert range measurements to meters
+        for(int i=0; i<7; i++){
+            if (range_status[i]==0){ // good measurement
+                range_m[i] = ((float)range[i])/1000.0f;
+            } else {
+                range_m[i] = 0.0f;
+            }
+        }
+
+
+        t2.reset();        
         dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
         // convert states
-        // for(int i=0; i<num_IDs; i++){
-        //     converted_position[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
-        // }
+        for(int i=0; i<num_IDs; i++){
+            conv_pos[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
+        }
         samp3 = t2.read_us();
+
+        // evaluate forward kinematics
+        p[0][0] = l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x
+        p[0][1] = l_yoff + l1*sin(conv_pos[0]) + l2*sin(conv_pos[0]+conv_pos[1]) + l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left y
+        p[0][2] = conv_pos[0]+conv_pos[1]+conv_pos[2]; // left theta
+        etip_left[0][0] = -sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[0][1] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[1][0] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[1][1] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[2][0] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[2][1] = -cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+
+        p[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right x
+        p[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]) + l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right y
+        p[1][2] = conv_pos[3]+conv_pos[4]+conv_pos[5]; // right theta
+        etip_right[0][0] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[0][1] = -cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[1][0] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[1][1] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[2][0] = -sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[2][1] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+
+        // check sensor values against proximity threshold
+        // if threshold is violated, calculate necessary inverse kinematics solution
+        pstar[0][0] = p[0][0]; // reset pstar and ik flags
+        pstar[0][1] = p[0][1];
+        pstar[1][0] = p[1][0];
+        pstar[1][1] = p[1][1];
+        left_ik = 0;
+        right_ik = 0;
+        // TODO: correct indices for finger sensors!!!!
+        // , range[6], range[0], range[1], range[2]
+        for (int i=0; i<3; i++){ // left finger sensors: range[3], range[4], range[5] (out,fw,in)
+            if ((range_m[i+3]>0.0f)&&(range_m[i+3]<prox_thresh)){
+                left_ik = 1;
+                pstar[0][0] += (range_m[i+3]-prox_thresh)*etip_left[i][0]; // x
+                pstar[0][1] += (range_m[i+3]-prox_thresh)*etip_left[i][1]; // y
+            }
+        }
+        for (int i=0; i<3; i++){ // right finger sensors: range[2], range[1], range[0] (out,fw,in)
+            if ((range_m[2-i]>0.0f)&&(range_m[2-i]<prox_thresh)){
+                right_ik = 1;
+                pstar[1][0] += (range_m[2-i]-prox_thresh)*etip_right[i][0]; // x
+                pstar[1][1] += (range_m[2-i]-prox_thresh)*etip_right[i][1]; // y
+            }
+        }
+        // use inverse kinematics to calculate new joint positions (in radians)
+        if (left_ik==1){
+            // calculate ik based on pstar
+            x2 = pstar[0][0] - l3*cos(link3_angles[0]);
+            y2 = pstar[0][1] - l3*sin(link3_angles[0]) - l_yoff;
+            l4 = sqrt(x2*x2 + y2*y2);
+            gamma = atan2(y2,x2);
+            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
+            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
+            new_pos[0] = gamma + alpha1;
+            new_pos[1] = -(3.14159f-alpha2);
+            new_pos[2] = link3_angles[0] - new_pos[0] - new_pos[1];
+        } else {
+            // set nominal pose
+            // TODO: change to taking steps towards the nominal pose?
+            new_pos[0] = default_pos[0];
+            new_pos[1] = default_pos[1];
+            new_pos[2] = default_pos[2];
+        }
+        if (right_ik==1){
+            // calculate ik based on pstar
+            x2 = pstar[1][0] - l3*cos(link3_angles[1]);
+            y2 = pstar[1][1] - l3*sin(link3_angles[1]) - r_yoff;
+            l4 = sqrt(x2*x2 + y2*y2);
+            gamma = atan2(y2,x2);
+            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
+            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
+            new_pos[3] = gamma - alpha1;
+            new_pos[4] = 3.14159f-alpha2;
+            new_pos[5] = link3_angles[1] - new_pos[3] - new_pos[4];
+        } else {
+            // set nominal pose
+            // TODO: change to taking steps towards the nominal pose?
+            new_pos[3] = default_pos[3];
+            new_pos[4] = default_pos[4];
+            new_pos[5] = default_pos[5];
+        }
+
+        // set new desired joint positions (in counts)
+        for (int i=0; i<num_IDs; i++){
+            des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad);
+            // des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad);
+        }
+        dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
+
 
         t2.reset();
         // printing data takes about 900us at baud of 460800
         // pc.printf("%.2f, %d, %d, %d, %d, %d\n\r",t3.read(), samp1+samp2, samp3, samp0, samp4, samp5);
         // pc.printf("%.2f, %d\n\r",t3.read(), samp5);
-        pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[3], range[4], range[5], range[6], range[0], range[1], range[2]);
-        // pc.printf("%d, %d, %d, %d, %d, %d\n\r\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5]);  
-        pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
+        pc.printf("%.2f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), range_m[3], range_m[4], range_m[5], range_m[6], range_m[0], range_m[1], range_m[2]);
+        // pc.printf("%.2f, %1.3f, %1.3f, %1.3f, ", t3.read(), range_m[3], range_m[4], range_m[5]); //, range_m[6], range_m[0], range_m[1], range_m[2]);
+        // pc.printf("%d, %d, %d, %d, %d, %d, %d, ", range_status[3], range_status[4], range_status[5], range_status[6], range_status[0], range_status[1], range_status[2]);  
+        // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
+
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
+
+        // print desired joint positions and forward kinematics instead of force sensor values
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, New Pos: %2.3f, %2.3f, %2.3f\n\r", p[0][0], p[0][1], x2, y2, l4, gamma, alpha1, alpha2, new_pos[0], new_pos[1], new_pos[2]); // fk
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], x2, y2, l4, gamma, alpha1, alpha2); // new positions in radians
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // new positions in radians
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
 
         samp4 = t2.read_us();
         samp5 = t.read_us();
