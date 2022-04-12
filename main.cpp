@@ -13,7 +13,7 @@
 Serial pc(USBTX, USBRX, 460800);
 DigitalOut led(LED1);
 
-float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+float loop_time = 0.05f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // dynamixels
@@ -60,16 +60,19 @@ ForceSensor right_finger(2, &sensor28); // class is modified to use new digital 
 I2C i2c1(PF_0, PF_1); //(PB_9, PB_8); // SDA, SCL
 I2C i2c2(PD_13, PD_12); 
 // initialize sensors
-VL6180X tof1; // right finger inner
-VL6180X tof2; // right finger forward
-VL6180X tof3; // right finger outer
-VL6180X tof4; // left finger outer
-VL6180X tof5; // left finger forward
-VL6180X tof6; // left finger inner
-VL6180X tof7; // palm
-int range[7];
-float range_m[7]; // range in m
-int range_status[7];
+VL6180X tof1; // left finger outer
+VL6180X tof2; // left finger forward
+VL6180X tof3; // left finger inner distal
+VL6180X tof4; // left finger inner proximal
+VL6180X tof5; // palm
+VL6180X tof6; // right finger inner proximal
+VL6180X tof7; // right finger inner distal
+VL6180X tof8; // right finger forward
+VL6180X tof9; // right finger outer
+
+int range[9];
+float range_m[9]; // range in m
+int range_status[9];
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
 
@@ -156,9 +159,9 @@ int main() {
 
     // perform any setup for the sensor here
     pc.printf("Sensor 1...\n\r");
-    set_mux1(2); // channel 2 on mux 
+    set_mux2(2); // channel 2 on mux 2 
     wait_us(100);
-    if(!tof1.begin(&i2c1)){
+    if(!tof1.begin(&i2c2)){
         pc.printf("Sensor 1 init failed.\n\r");
     }
     wait_us(100);
@@ -167,9 +170,9 @@ int main() {
     tof1.startRangeContinuous(range_period);
     wait_us(1000);
     pc.printf("Sensor 2...\n\r");
-    set_mux1(3); // channel 3 on mux
+    set_mux2(3); // channel 3 on mux 2
     wait_us(100);
-    if(!tof2.begin(&i2c1)){
+    if(!tof2.begin(&i2c2)){
         pc.printf("Sensor 2 init failed.\n\r");
     }
     wait_us(100);
@@ -177,30 +180,34 @@ int main() {
     wait_us(100);
     tof2.startRangeContinuous(range_period);
     wait_us(1000);
+
+
     pc.printf("Sensor 3...\n\r");
-    set_mux1(4); // channel 4 on mux
+    set_mux2(4); // channel 4 on mux 2
     wait_us(100);
-    if(!tof3.begin(&i2c1)){
+    if(!tof3.begin(&i2c2)){
         pc.printf("Sensor 3 init failed.\n\r");
     }
-    wait_us(100);
-    tof3.stopRangeContinuous();
-    wait_us(100);
-    tof3.startRangeContinuous(range_period);
+    // wait_us(100);
+    // tof3.stopRangeContinuous();
+    // wait_us(100);
+    // tof3.startRangeContinuous(range_period);
     wait_us(1000);
     pc.printf("Sensor 4...\n\r");
-    set_mux2(2); // channel 2 on mux 
+    set_mux2(5); // channel 5 on mux 2 
     wait_us(100);
     if(!tof4.begin(&i2c2)){
         pc.printf("Sensor 4 init failed.\n\r");
     }
-    wait_us(100);
-    tof4.stopRangeContinuous();
-    wait_us(100);
-    tof4.startRangeContinuous(range_period);
+    // wait_us(100);
+    // tof4.stopRangeContinuous();
+    // wait_us(100);
+    // tof4.startRangeContinuous(range_period);
     wait_us(1000);
+
+
     pc.printf("Sensor 5...\n\r");
-    set_mux2(3); // channel 3 on mux
+    set_mux2(1); // channel 1 on mux 2
     wait_us(100);
     if(!tof5.begin(&i2c2)){
         pc.printf("Sensor 5 init failed.\n\r");
@@ -210,27 +217,53 @@ int main() {
     wait_us(100);
     tof5.startRangeContinuous(range_period);
     wait_us(1000);
+
+
     pc.printf("Sensor 6...\n\r");
-    set_mux2(4); // channel 4 on mux
+    set_mux1(5); // channel 5 on mux 1
     wait_us(100);
-    if(!tof6.begin(&i2c2)){
+    if(!tof6.begin(&i2c1)){
         pc.printf("Sensor 6 init failed.\n\r");
     }
-    wait_us(100);
-    tof6.stopRangeContinuous();
-    wait_us(100);
-    tof6.startRangeContinuous(range_period);
+    // wait_us(100);
+    // tof6.stopRangeContinuous();
+    // wait_us(100);
+    // tof6.startRangeContinuous(range_period);
     wait_us(1000);
     pc.printf("Sensor 7...\n\r");
-    set_mux2(1); // channel 1 on mux
+    set_mux1(2); // channel 2 on mux 1
     wait_us(100);
-    if(!tof7.begin(&i2c2)){
+    if(!tof7.begin(&i2c1)){
         pc.printf("Sensor 7 init failed.\n\r");
     }
+    // wait_us(100);
+    // tof7.stopRangeContinuous();
+    // wait_us(100);
+    // tof7.startRangeContinuous(range_period);
+    wait_us(1000);
+
+
+    pc.printf("Sensor 8...\n\r");
+    set_mux1(3); // channel 3 on mux 1
     wait_us(100);
-    tof7.stopRangeContinuous();
+    if(!tof8.begin(&i2c1)){
+        pc.printf("Sensor 8 init failed.\n\r");
+    }
     wait_us(100);
-    tof7.startRangeContinuous(range_period);
+    tof8.stopRangeContinuous();
+    wait_us(100);
+    tof8.startRangeContinuous(range_period);
+    wait_us(1000);
+    pc.printf("Sensor 9...\n\r");
+    set_mux1(4); // channel 4 on mux 1
+    wait_us(100);
+    if(!tof9.begin(&i2c1)){
+        pc.printf("Sensor 9 init failed.\n\r");
+    }
+    wait_us(100);
+    tof9.stopRangeContinuous();
+    wait_us(100);
+    tof9.startRangeContinuous(range_period);
     wait_us(1000);
 
     left_finger.Initialize();
@@ -267,58 +300,73 @@ int main() {
         t2.reset();
         // reading all of the continuous range measurements takes about 2ms with current wait times
         // TODO: could remove range status reading to speed up?
-        set_mux1(2);
+        set_mux2(2);
         wait_us(10);
         range[0] = tof1.readRangeResult();
         wait_us(10);
         range_status[0] = tof1.readRangeStatus();
         wait_us(10);
-        set_mux1(3);
+        set_mux2(3);
         wait_us(10);
         range[1] = tof2.readRangeResult();
         wait_us(10);
         range_status[1] = tof2.readRangeStatus();
         wait_us(10);
-        set_mux1(4);
+        set_mux2(4);
         wait_us(10);
-        range[2] = tof3.readRangeResult();
+        range[2] = tof3.readRange(); //Result();
         wait_us(10);
         range_status[2] = tof3.readRangeStatus();
         wait_us(10);
-        samp1 = t2.read_us();
-
-        t2.reset();
-        set_mux2(2);
+        set_mux2(5);
         wait_us(10);
-        range[3] = tof4.readRangeResult();
+        range[3] = tof4.readRange(); //Result();
         wait_us(10);
         range_status[3] = tof4.readRangeStatus();
         wait_us(10);
-        set_mux2(3);
+        set_mux2(1);
         wait_us(10);
         range[4] = tof5.readRangeResult();
         wait_us(10);
         range_status[4] = tof5.readRangeStatus();
         wait_us(10);
-        set_mux2(4);
+        samp1 = t2.read_us();
+
+        t2.reset();
+        set_mux1(5);
         wait_us(10);
-        range[5] = tof6.readRangeResult();
+        range[5] = tof6.readRange(); //Result();
         wait_us(10);
         range_status[5] = tof6.readRangeStatus();
         wait_us(10);
-        set_mux2(1);
+        set_mux1(2);
         wait_us(10);
-        range[6] = tof7.readRangeResult();
+        range[6] = tof7.readRange(); //Result();
         wait_us(10);
         range_status[6] = tof7.readRangeStatus();
         wait_us(10);
+        set_mux1(3);
+        wait_us(10);
+        range[7] = tof8.readRangeResult();
+        wait_us(10);
+        range_status[7] = tof8.readRangeStatus();
+        wait_us(10);
+        set_mux1(4);
+        wait_us(10);
+        range[8] = tof9.readRangeResult();
+        wait_us(10);
+        range_status[8] = tof9.readRangeStatus();
+        wait_us(10);
         samp2 = t2.read_us();
 
-        // convert range measurements to meters
-        // TODO: filter measurements here?
-        for(int i=0; i<7; i++){
+        // convert range measurements to meters and do some filtering
+        for(int i=0; i<9; i++){
             if (range_status[i]==0){ // good measurement
-                range_m[i] = ((float)range[i])/1000.0f;
+                if (range_m[i]==0.0f){
+                    range_m[i] = ((float)range[i])/1000.0f;
+                } else {
+                    range_m[i] = 0.8f*(((float)range[i])/1000.0f) + 0.2f*range_m[i];
+                }
             } else {
                 range_m[i] = 0.0f;
             }
@@ -417,8 +465,8 @@ int main() {
 
         // set new desired joint positions (in counts)
         for (int i=0; i<num_IDs; i++){
-            des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad);
-            // des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad);
+            // des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad);
+            des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad);
         }
         dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
@@ -426,17 +474,17 @@ int main() {
 
         t2.reset();
         // printing data takes about 4ms at baud of 460800
-        pc.printf("%.2f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), range_m[3], range_m[4], range_m[5], range_m[6], range_m[0], range_m[1], range_m[2]);
-        // pc.printf("%d, %d, %d, %d, %d, %d, %d, ", range_status[3], range_status[4], range_status[5], range_status[6], range_status[0], range_status[1], range_status[2]);  
+        pc.printf("%.2f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
 
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
 
         // print desired joint positions and forward kinematics instead of force sensor values
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
+        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
 
         // TODO: only print every five or ten loops?
         // pc.printf("%d, %d\n\r\n\r", samp4, samp5);
