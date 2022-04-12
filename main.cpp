@@ -100,12 +100,12 @@ float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
 float pstar[2][2]; // desired change in end-effector position
 float prox_thresh = 0.030f; // avoidance threshold
-float glide_thresh = 0.080f; // glide threshold
+float glide_thresh = 0.030f; // glide threshold
 float corr_thresh = 0.080f; // link 3 correction threshold
 float ang_thresh = 0.0f; // angle threshold, in mm difference
 float ang_max = 1.5; // maximum angle correction from nominal
 float ang_min = -1.5; // minimum angle correction from nominal
-float glide_dist = 0.040f; // desired contact distance for gliding/contour following
+float glide_dist = 0.030f; // desired contact distance for gliding/contour following
 float link3_delta_limit = 0.2f; // maximum change in position command
 int left_ik = 0;
 int right_ik = 0;
@@ -441,9 +441,10 @@ int main() {
             link3_corrections[0] = link3_angles_des[0];
         }
         if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
+            left_ik = 1;
             l_avg = 0.5*(range_m[2]+range_m[3]);
-            // pstar[0][0] += (l_avg-glide_dist)*etip_left[2][0]; // x
-            // pstar[0][1] += (l_avg-glide_dist)*etip_left[2][1]; // y
+            pstar[0][0] += (l_avg-glide_thresh)*etip_left[2][0]; // x
+            pstar[0][1] += (l_avg-glide_thresh)*etip_left[2][1]; // y
         }
         if ((range_m[5]<corr_thresh)||(range_m[6]<corr_thresh)){ // if at least one of the sensors is activated for angle correction
             r_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
@@ -454,41 +455,56 @@ int main() {
         } else {
             link3_corrections[1] = link3_angles_des[1];
         }
-        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for contact avoidance
+        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for gliding
+            right_ik = 1;
             r_avg = 0.5*(range_m[5]+range_m[6]);
-            pstar[1][0] += (r_avg-glide_dist)*etip_right[2][0]; // x
-            pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
+            pstar[1][0] += (r_avg-glide_thresh)*etip_right[2][0]; // x
+            pstar[1][1] += (r_avg-glide_thresh)*etip_right[2][1]; // y
         }
 
-        // Calculate "avoidance" movements for outer sensors
-        for (int i=0; i<2; i++){ // left finger sensors: (out,fw) range[0], range[1]
-            if (range_m[i]<prox_thresh){
-                left_ik = 1;
-                pstar[0][0] += (range_m[i]-prox_thresh)*etip_left[i][0]; // x
-                pstar[0][1] += (range_m[i]-prox_thresh)*etip_left[i][1]; // y
-            }
-        }
-        for (int i=0; i<2; i++){ // right finger sensors: (out,fw) range[8], range[7]
-            if (range_m[8-i]<prox_thresh){
-                right_ik = 1;
-                pstar[1][0] += (range_m[8-i]-prox_thresh)*etip_right[i][0]; // x
-                pstar[1][1] += (range_m[8-i]-prox_thresh)*etip_right[i][1]; // y
-            }
-        }
+        // // Calculate "avoidance" movements for outer sensors
+        // for (int i=0; i<2; i++){ // left finger sensors: (out,fw) range[0], range[1]
+        //     if (range_m[i]<prox_thresh){
+        //         left_ik = 1;
+        //         pstar[0][0] += (range_m[i]-prox_thresh)*etip_left[i][0]; // x
+        //         pstar[0][1] += (range_m[i]-prox_thresh)*etip_left[i][1]; // y
+        //     }
+        // }
+        // for (int i=0; i<2; i++){ // right finger sensors: (out,fw) range[8], range[7]
+        //     if (range_m[8-i]<prox_thresh){
+        //         right_ik = 1;
+        //         pstar[1][0] += (range_m[8-i]-prox_thresh)*etip_right[i][0]; // x
+        //         pstar[1][1] += (range_m[8-i]-prox_thresh)*etip_right[i][1]; // y
+        //     }
+        // }
 
         // use inverse kinematics to calculate new joint positions (in radians)
         // TODO: make inverse kinematics more robust! (use received angles for initial calculations?)
         if (left_ik==1){
             // calculate ik based on pstar
-            x2 = pstar[0][0] - l3*cos(link3_angles_des[0]+link3_corrections[0]);
-            y2 = pstar[0][1] - l3*sin(link3_angles_des[0]+link3_corrections[0]) - l_yoff;
-            l4 = sqrt(x2*x2 + y2*y2);
+            // link3_corrections[0] = link3_corrections[0] - conv_pos[0] - conv_pos[1]; // convert to joint angle to limit movement
+            // if ((link3_corrections[0]-conv_pos[2])>link3_delta_limit){
+            //     link3_corrections[0] = conv_pos[2] + link3_delta_limit;
+            // } else if ((link3_corrections[0]-conv_pos[2])<-link3_delta_limit){
+            //     link3_corrections[0] = conv_pos[2] - link3_delta_limit;
+            // }
+            // link3_corrections[0] = link3_corrections[0] + conv_pos[0] + conv_pos[1]; // convert back to world angle
+            x2 = pstar[0][0] - l3*cos(link3_corrections[0]);
+            y2 = pstar[0][1] - l3*sin(link3_corrections[0]) - l_yoff;
+            l4 = fminf2( sqrt(x2*x2 + y2*y2), l1+l2);
             gamma = atan2(y2,x2);
-            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
-            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
-            new_pos[0] = gamma + alpha1;
-            new_pos[1] = -(3.14159f-alpha2);
-            new_pos[2] = link3_corrections[0] - new_pos[0] - new_pos[1]; // + link_angles_des[0]
+            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2.0f*l1*l4)));
+            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2.0f*l1*l2)));
+            if ((!isnan(gamma))&&(!isnan(alpha1))&&(!isnan(alpha2))) {
+                new_pos[0] = gamma + alpha1;
+                new_pos[1] = -(3.14159f-alpha2);
+                new_pos[2] = link3_corrections[0] - new_pos[0] - new_pos[1]; // + link_angles_des[0]
+            }
+            if ((new_pos[2]-conv_pos[2])>link3_delta_limit){ // check limits again?
+                new_pos[2] = conv_pos[2] + link3_delta_limit;
+            } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
+                new_pos[2] = conv_pos[2] - link3_delta_limit;
+            }
         } else {
             // set nominal pose
             // TODO: change to taking steps towards the nominal pose?
@@ -498,15 +514,30 @@ int main() {
         }
         if (right_ik==1){
             // calculate ik based on pstar
-            x2 = pstar[1][0] - l3*cos(link3_angles_des[1]+link3_corrections[1]);
-            y2 = pstar[1][1] - l3*sin(link3_angles_des[1]+link3_corrections[1]) - r_yoff;
-            l4 = sqrt(x2*x2 + y2*y2);
+            // link3_corrections[1] = link3_corrections[1] - conv_pos[3] - conv_pos[4]; // convert to joint angle to limit movement
+            // if ((link3_corrections[1]-conv_pos[5])>link3_delta_limit){
+            //     link3_corrections[1] = conv_pos[5] + link3_delta_limit;
+            // } else if ((link3_corrections[1]-conv_pos[5])<-link3_delta_limit){
+            //     link3_corrections[1] = conv_pos[5] - link3_delta_limit;
+            // }
+            // link3_corrections[1] = link3_corrections[1] + conv_pos[3] + conv_pos[4]; // convert back to world angle
+            x2 = pstar[1][0] - l3*cos(link3_corrections[1]);
+            y2 = pstar[1][1] - l3*sin(link3_corrections[1]) - r_yoff;
+            l4 = fminf2( sqrt(x2*x2 + y2*y2), l1+l2);
             gamma = atan2(y2,x2);
-            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
-            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
-            new_pos[3] = gamma - alpha1;
-            new_pos[4] = 3.14159f-alpha2;
-            new_pos[5] = link3_corrections[1] - new_pos[3] - new_pos[4]; // + link_angles_des[1]
+            alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2.0f*l1*l4)));
+            alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2.0f*l1*l2)));
+            pc.printf("%f, %f, %f, %f, %f, %f, %f, %f, %f\n\r", range_m[5], range_m[6], link3_corrections[1], x2, y2, l4, gamma, alpha1, alpha2);
+            if ((!isnan(gamma))&&(!isnan(alpha1))&&(!isnan(alpha2))) {
+                new_pos[3] = gamma - alpha1;
+                new_pos[4] = 3.14159f-alpha2;
+                new_pos[5] = link3_corrections[1] - new_pos[3] - new_pos[4]; // + link_angles_des[1]
+            } 
+            if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){ // check limits again?
+                new_pos[5] = conv_pos[5] + link3_delta_limit;
+            } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
+                new_pos[5] = conv_pos[5] - link3_delta_limit;
+            }
         } else {
             // set nominal pose
             // TODO: change to taking steps towards the nominal pose?
@@ -545,9 +576,9 @@ int main() {
         t2.reset();
         // printing data takes about 4ms at baud of 460800
         // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
-        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        // pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
         
-        pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
+        // pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
         
         // pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
