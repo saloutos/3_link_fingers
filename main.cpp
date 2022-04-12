@@ -24,8 +24,9 @@ int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
 float pulse_to_rad = (2.0f*3.14159f)/4096.0f; // = 0.001534
 float conv_pos[6];
-float default_pos[] = {0.7f, -1.0f, 0.3f, -0.7f, 1.0f, -0.3f}; // nominal joint positions
+float default_pos[] = {0.9f, -1.0f, 0.7f, -0.9f, 1.0f, -0.7f}; // nominal joint positions
 // float default_pos[] = {0.9f, -0.9f, -0.7f, -0.9f, 0.9f, 0.7f}; // nominal joint positions
+float link3_angles_des[] = {0.6f, -0.6f}; // [left,right] in world reference frame
 float new_pos[6];
 uint32_t des_pos[6];
 
@@ -74,7 +75,7 @@ int range[9];
 float range_m[9]; // range in m
 int range_status[9];
 uint8_t MUX_ADDR = (0x70<<1);
-uint16_t range_period = 30;
+uint16_t range_period = 20;
 
 // timer stuff
 Timer t;
@@ -89,6 +90,7 @@ float l3 = 0.03f;
 float lout = 0.0125f;
 float lfw = 0.015f;
 float lin = 0.0125f;
+float linbw = 0.0225;
 float l_yoff = 0.0475f;
 float r_yoff = -0.0475f;
 float c_xoff = -0.025f;
@@ -97,12 +99,20 @@ float v[2][3];
 float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
 float pstar[2][2]; // desired change in end-effector position
-float prox_thresh = 0.030f; // proximity threshold of 20mm
+float prox_thresh = 0.030f; // avoidance threshold
+float glide_thresh = 0.080f; // glide threshold
+float corr_thresh = 0.080f; // link 3 correction threshold
+float ang_thresh = 0.0f; // angle threshold, in mm difference
+float ang_max = 1.5; // maximum angle correction from nominal
+float ang_min = -1.5; // minimum angle correction from nominal
+float glide_dist = 0.040f; // desired contact distance for gliding/contour following
+float link3_delta_limit = 0.2f; // maximum change in position command
 int left_ik = 0;
 int right_ik = 0;
-float link3_angles[] = {0.0f, 0.0f}; // [left,right] in world reference frame
+float link3_corrections[2]; // corrections to link 3 angles based on difference in proximity measurements
 float x2, y2, l4, gamma, alpha1, alpha2;  
 float pos_eps = 0.5; // exponential return to the default pose
+float l_diff, l_avg, r_diff, r_avg; // values for internal sensors
 
 // takes joint angles and populates finger kinematics x,y,theta
 // void kinematics(){
@@ -121,7 +131,7 @@ void set_mux1(uint8_t channel){
     buffer[0] = (1 << channel);
     int result = 1; 
     result = i2c1.write(MUX_ADDR, buffer, 1);
-    // pc.printf("C: %d, r: %d\n\r", channel, result);
+    // pc.printf("M: 1, C: %d, r: %d\n\r", channel, result);
 }
 
 void set_mux2(uint8_t channel){
@@ -130,13 +140,17 @@ void set_mux2(uint8_t channel){
     buffer[0] = (1 << channel);
     int result = 1; 
     result = i2c2.write(MUX_ADDR, buffer, 1);
-    // pc.printf("C: %d, r: %d\n\r", channel, result);
+    // pc.printf("M: 2, C: %d, r: %d\n\r", channel, result);
 }
 
 // main loop
 int main() {
     
     // start up
+
+    // wait(3.0);
+
+
     pc.printf("Initializing.\n\r");
     
     i2c1.frequency(400000); // set bus freq
@@ -160,111 +174,111 @@ int main() {
     // perform any setup for the sensor here
     pc.printf("Sensor 1...\n\r");
     set_mux2(2); // channel 2 on mux 2 
-    wait_us(100);
+    wait_us(1000);
     if(!tof1.begin(&i2c2)){
         pc.printf("Sensor 1 init failed.\n\r");
     }
-    wait_us(100);
-    tof1.stopRangeContinuous();
-    wait_us(100);
-    tof1.startRangeContinuous(range_period);
-    wait_us(1000);
+    // wait_us(1000);
+    // tof1.stopRangeContinuous();
+    // wait_us(1000);
+    // tof1.startRangeContinuous(range_period);
+    wait_us(10000);
     pc.printf("Sensor 2...\n\r");
     set_mux2(3); // channel 3 on mux 2
-    wait_us(100);
+    wait_us(1000);
     if(!tof2.begin(&i2c2)){
         pc.printf("Sensor 2 init failed.\n\r");
     }
-    wait_us(100);
-    tof2.stopRangeContinuous();
-    wait_us(100);
-    tof2.startRangeContinuous(range_period);
-    wait_us(1000);
+    // wait_us(1000);
+    // tof2.stopRangeContinuous();
+    // wait_us(1000);
+    // tof2.startRangeContinuous(range_period);
+    wait_us(10000);
 
 
     pc.printf("Sensor 3...\n\r");
     set_mux2(4); // channel 4 on mux 2
-    wait_us(100);
+    wait_us(1000);
     if(!tof3.begin(&i2c2)){
         pc.printf("Sensor 3 init failed.\n\r");
     }
-    // wait_us(100);
+    // wait_us(1000);
     // tof3.stopRangeContinuous();
-    // wait_us(100);
+    // wait_us(1000);
     // tof3.startRangeContinuous(range_period);
-    wait_us(1000);
+    wait_us(100000);
     pc.printf("Sensor 4...\n\r");
     set_mux2(5); // channel 5 on mux 2 
-    wait_us(100);
+    wait_us(1000);
     if(!tof4.begin(&i2c2)){
         pc.printf("Sensor 4 init failed.\n\r");
     }
-    // wait_us(100);
+    // wait_us(1000);
     // tof4.stopRangeContinuous();
-    // wait_us(100);
+    // wait_us(1000);
     // tof4.startRangeContinuous(range_period);
-    wait_us(1000);
+    wait_us(10000);
 
 
     pc.printf("Sensor 5...\n\r");
     set_mux2(1); // channel 1 on mux 2
-    wait_us(100);
+    wait_us(1000);
     if(!tof5.begin(&i2c2)){
         pc.printf("Sensor 5 init failed.\n\r");
     }
-    wait_us(100);
-    tof5.stopRangeContinuous();
-    wait_us(100);
-    tof5.startRangeContinuous(range_period);
-    wait_us(1000);
+    // wait_us(1000);
+    // tof5.stopRangeContinuous();
+    // wait_us(1000);
+    // tof5.startRangeContinuous(range_period);
+    wait_us(10000);
 
 
     pc.printf("Sensor 6...\n\r");
     set_mux1(5); // channel 5 on mux 1
-    wait_us(100);
+    wait_us(1000);
     if(!tof6.begin(&i2c1)){
         pc.printf("Sensor 6 init failed.\n\r");
     }
-    // wait_us(100);
+    // wait_us(1000);
     // tof6.stopRangeContinuous();
-    // wait_us(100);
+    // wait_us(1000);
     // tof6.startRangeContinuous(range_period);
-    wait_us(1000);
+    wait_us(10000);
     pc.printf("Sensor 7...\n\r");
     set_mux1(2); // channel 2 on mux 1
-    wait_us(100);
+    wait_us(1000);
     if(!tof7.begin(&i2c1)){
         pc.printf("Sensor 7 init failed.\n\r");
     }
-    // wait_us(100);
+    // wait_us(1000);
     // tof7.stopRangeContinuous();
-    // wait_us(100);
+    // wait_us(1000);
     // tof7.startRangeContinuous(range_period);
-    wait_us(1000);
+    wait_us(10000);
 
 
     pc.printf("Sensor 8...\n\r");
     set_mux1(3); // channel 3 on mux 1
-    wait_us(100);
+    wait_us(1000);
     if(!tof8.begin(&i2c1)){
         pc.printf("Sensor 8 init failed.\n\r");
     }
-    wait_us(100);
-    tof8.stopRangeContinuous();
-    wait_us(100);
-    tof8.startRangeContinuous(range_period);
-    wait_us(1000);
+    // wait_us(1000);
+    // tof8.stopRangeContinuous();
+    // wait_us(1000);
+    // tof8.startRangeContinuous(range_period);
+    wait_us(10000);
     pc.printf("Sensor 9...\n\r");
     set_mux1(4); // channel 4 on mux 1
-    wait_us(100);
+    wait_us(1000);
     if(!tof9.begin(&i2c1)){
         pc.printf("Sensor 9 init failed.\n\r");
     }
-    wait_us(100);
-    tof9.stopRangeContinuous();
-    wait_us(100);
-    tof9.startRangeContinuous(range_period);
-    wait_us(1000);
+    // wait_us(1000);
+    // tof9.stopRangeContinuous();
+    // wait_us(1000);
+    // tof9.startRangeContinuous(range_period);
+    wait_us(10000);
 
     left_finger.Initialize();
     left_finger.Calibrate();
@@ -284,6 +298,7 @@ int main() {
 
     while (1) {
 
+
         t.reset();
                     
         // get force sensor data
@@ -300,18 +315,18 @@ int main() {
         t2.reset();
         // reading all of the continuous range measurements takes about 2ms with current wait times
         // TODO: could remove range status reading to speed up?
-        set_mux2(2);
-        wait_us(10);
-        range[0] = tof1.readRangeResult();
-        wait_us(10);
-        range_status[0] = tof1.readRangeStatus();
-        wait_us(10);
-        set_mux2(3);
-        wait_us(10);
-        range[1] = tof2.readRangeResult();
-        wait_us(10);
-        range_status[1] = tof2.readRangeStatus();
-        wait_us(10);
+        // set_mux2(2);
+        // wait_us(10);
+        // range[0] = tof1.readRange(); //Result();
+        // wait_us(10);
+        // range_status[0] = tof1.readRangeStatus();
+        // wait_us(10);
+        // set_mux2(3);
+        // wait_us(10);
+        // range[1] = tof2.readRange(); //Result();
+        // wait_us(10);
+        // range_status[1] = tof2.readRangeStatus();
+        // wait_us(10);
         set_mux2(4);
         wait_us(10);
         range[2] = tof3.readRange(); //Result();
@@ -326,7 +341,7 @@ int main() {
         wait_us(10);
         set_mux2(1);
         wait_us(10);
-        range[4] = tof5.readRangeResult();
+        range[4] = tof5.readRange(); //Result();
         wait_us(10);
         range_status[4] = tof5.readRangeStatus();
         wait_us(10);
@@ -345,33 +360,32 @@ int main() {
         wait_us(10);
         range_status[6] = tof7.readRangeStatus();
         wait_us(10);
-        set_mux1(3);
-        wait_us(10);
-        range[7] = tof8.readRangeResult();
-        wait_us(10);
-        range_status[7] = tof8.readRangeStatus();
-        wait_us(10);
-        set_mux1(4);
-        wait_us(10);
-        range[8] = tof9.readRangeResult();
-        wait_us(10);
-        range_status[8] = tof9.readRangeStatus();
-        wait_us(10);
+        // set_mux1(3);
+        // wait_us(10);
+        // range[7] = tof8.readRange(); //Result();
+        // wait_us(10);
+        // range_status[7] = tof8.readRangeStatus();
+        // wait_us(10);
+        // set_mux1(4);
+        // wait_us(10);
+        // range[8] = tof9.readRange(); //Result();
+        // wait_us(10);
+        // range_status[8] = tof9.readRangeStatus();
+        // wait_us(10);
         samp2 = t2.read_us();
 
         // convert range measurements to meters and do some filtering
         for(int i=0; i<9; i++){
             if (range_status[i]==0){ // good measurement
-                if (range_m[i]==0.0f){
+                if (range_m[i]==0.0f){ //==0.2f
                     range_m[i] = ((float)range[i])/1000.0f;
                 } else {
-                    range_m[i] = 0.8f*(((float)range[i])/1000.0f) + 0.2f*range_m[i];
+                    range_m[i] = 0.2f*(((float)range[i])/1000.0f) + 0.8f*range_m[i];
                 }
             } else {
-                range_m[i] = 0.0f;
+                range_m[i] = 0.2f;
             }
         }
-
 
         t2.reset();        
         dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
@@ -410,33 +424,71 @@ int main() {
         pstar[1][1] = p[1][1];
         left_ik = 0;
         right_ik = 0;
-        for (int i=0; i<3; i++){ // left finger sensors: range[3], range[4], range[5] (out,fw,in)
-            if ((range_m[i+3]>0.0f)&&(range_m[i+3]<prox_thresh)){
+
+        // Calculate "gliding" movements for link 3 angles and maintaining a distance from contact
+        // for inner sensors, use difference in values to balance link 3 and average of values to move tip
+        l_diff = 0.0f;
+        l_avg = 0.0f;
+        r_diff = 0.0f;
+        r_avg = 0.0f;
+        if ((range_m[2]<corr_thresh)||(range_m[3]<corr_thresh)){ // if at least one of the sensors is activated for angle correction
+            l_diff = fmaxf2( fminf2( range_m[3]-range_m[2], corr_thresh), -corr_thresh);
+            if (abs(l_diff)>ang_thresh){
+                link3_corrections[0] = atan2(l_diff,linbw);
+                link3_corrections[0] = fmaxf2( fminf2( link3_corrections[0], ang_max), ang_min);
+            }
+        }  else {
+            link3_corrections[0] = link3_angles_des[0];
+        }
+        if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
+            l_avg = 0.5*(range_m[2]+range_m[3]);
+            // pstar[0][0] += (l_avg-glide_dist)*etip_left[2][0]; // x
+            // pstar[0][1] += (l_avg-glide_dist)*etip_left[2][1]; // y
+        }
+        if ((range_m[5]<corr_thresh)||(range_m[6]<corr_thresh)){ // if at least one of the sensors is activated for angle correction
+            r_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
+            if (abs(r_diff)>ang_thresh){
+                link3_corrections[1] = atan2(r_diff,linbw);
+                link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min);
+            }
+        } else {
+            link3_corrections[1] = link3_angles_des[1];
+        }
+        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for contact avoidance
+            r_avg = 0.5*(range_m[5]+range_m[6]);
+            pstar[1][0] += (r_avg-glide_dist)*etip_right[2][0]; // x
+            pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
+        }
+
+        // Calculate "avoidance" movements for outer sensors
+        for (int i=0; i<2; i++){ // left finger sensors: (out,fw) range[0], range[1]
+            if (range_m[i]<prox_thresh){
                 left_ik = 1;
-                pstar[0][0] += (range_m[i+3]-prox_thresh)*etip_left[i][0]; // x
-                pstar[0][1] += (range_m[i+3]-prox_thresh)*etip_left[i][1]; // y
+                pstar[0][0] += (range_m[i]-prox_thresh)*etip_left[i][0]; // x
+                pstar[0][1] += (range_m[i]-prox_thresh)*etip_left[i][1]; // y
             }
         }
-        for (int i=0; i<3; i++){ // right finger sensors: range[2], range[1], range[0] (out,fw,in)
-            if ((range_m[2-i]>0.0f)&&(range_m[2-i]<prox_thresh)){
+        for (int i=0; i<2; i++){ // right finger sensors: (out,fw) range[8], range[7]
+            if (range_m[8-i]<prox_thresh){
                 right_ik = 1;
-                pstar[1][0] += (range_m[2-i]-prox_thresh)*etip_right[i][0]; // x
-                pstar[1][1] += (range_m[2-i]-prox_thresh)*etip_right[i][1]; // y
+                pstar[1][0] += (range_m[8-i]-prox_thresh)*etip_right[i][0]; // x
+                pstar[1][1] += (range_m[8-i]-prox_thresh)*etip_right[i][1]; // y
             }
         }
+
         // use inverse kinematics to calculate new joint positions (in radians)
-        // TODO: make inverse kinematics more robust!
+        // TODO: make inverse kinematics more robust! (use received angles for initial calculations?)
         if (left_ik==1){
             // calculate ik based on pstar
-            x2 = pstar[0][0] - l3*cos(link3_angles[0]);
-            y2 = pstar[0][1] - l3*sin(link3_angles[0]) - l_yoff;
+            x2 = pstar[0][0] - l3*cos(link3_angles_des[0]+link3_corrections[0]);
+            y2 = pstar[0][1] - l3*sin(link3_angles_des[0]+link3_corrections[0]) - l_yoff;
             l4 = sqrt(x2*x2 + y2*y2);
             gamma = atan2(y2,x2);
             alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
             alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
             new_pos[0] = gamma + alpha1;
             new_pos[1] = -(3.14159f-alpha2);
-            new_pos[2] = link3_angles[0] - new_pos[0] - new_pos[1];
+            new_pos[2] = link3_corrections[0] - new_pos[0] - new_pos[1]; // + link_angles_des[0]
         } else {
             // set nominal pose
             // TODO: change to taking steps towards the nominal pose?
@@ -446,15 +498,15 @@ int main() {
         }
         if (right_ik==1){
             // calculate ik based on pstar
-            x2 = pstar[1][0] - l3*cos(link3_angles[1]);
-            y2 = pstar[1][1] - l3*sin(link3_angles[1]) - r_yoff;
+            x2 = pstar[1][0] - l3*cos(link3_angles_des[1]+link3_corrections[1]);
+            y2 = pstar[1][1] - l3*sin(link3_angles_des[1]+link3_corrections[1]) - r_yoff;
             l4 = sqrt(x2*x2 + y2*y2);
             gamma = atan2(y2,x2);
             alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2*l1*l4)));
             alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2*l1*l2)));
             new_pos[3] = gamma - alpha1;
             new_pos[4] = 3.14159f-alpha2;
-            new_pos[5] = link3_angles[1] - new_pos[3] - new_pos[4];
+            new_pos[5] = link3_corrections[1] - new_pos[3] - new_pos[4]; // + link_angles_des[1]
         } else {
             // set nominal pose
             // TODO: change to taking steps towards the nominal pose?
@@ -463,19 +515,41 @@ int main() {
             new_pos[5] = conv_pos[5] + pos_eps*(default_pos[5]-conv_pos[5]);
         }
 
+
         // set new desired joint positions (in counts)
         for (int i=0; i<num_IDs; i++){
-            // des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad);
-            des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad);
+            // des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad); // use ik positions
+            des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad); // just hold default positions
         }
+
+        // set link 3 angles correctly, checking that the change in angle isn't too large
+        new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
+        if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
+            new_pos[2] = conv_pos[2] + link3_delta_limit;
+        } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
+            new_pos[2] = conv_pos[2] - link3_delta_limit;
+        }
+        new_pos[5] = link3_corrections[1]-default_pos[3]-default_pos[4];
+        if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){
+            new_pos[5] = conv_pos[5] + link3_delta_limit;
+        } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
+            new_pos[5] = conv_pos[5] - link3_delta_limit;
+        }
+        des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
+        des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
+
         dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
         // loop takes about 5.5ms without printing
 
         t2.reset();
         // printing data takes about 4ms at baud of 460800
-        pc.printf("%.2f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
-        pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
+        // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        
+        pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
+        
+        // pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
 
