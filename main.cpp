@@ -24,9 +24,9 @@ int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
 float pulse_to_rad = (2.0f*3.14159f)/4096.0f; // = 0.001534
 float conv_pos[6];
-float default_pos[] = {0.9f, -1.0f, 0.7f, -0.9f, 1.0f, -0.7f}; // nominal joint positions
+float default_pos[] = {1.0f, -1.8f, 1.3f, -1.0f, 1.8f, -1.3f}; // nominal joint positions
 // float default_pos[] = {0.9f, -0.9f, -0.7f, -0.9f, 0.9f, 0.7f}; // nominal joint positions
-float link3_angles_des[] = {0.6f, -0.6f}; // [left,right] in world reference frame
+float link3_angles_des[] = {0.5f, -0.5f}; // [left,right] in world reference frame
 float new_pos[6];
 uint32_t des_pos[6];
 
@@ -73,6 +73,7 @@ VL6180X tof9; // right finger outer
 
 int range[9];
 float range_m[9]; // range in m
+float range_m_raw[9]; // range in m, non-filtered
 int range_status[9];
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 20;
@@ -100,7 +101,7 @@ float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
 float pstar[2][2]; // desired change in end-effector position
 float prox_thresh = 0.030f; // avoidance threshold
-float glide_thresh = 0.030f; // glide threshold
+float glide_thresh = 0.060f; // glide threshold
 float corr_thresh = 0.080f; // link 3 correction threshold
 float ang_thresh = 0.0f; // angle threshold, in mm difference
 float ang_max = 1.5; // maximum angle correction from nominal
@@ -111,7 +112,7 @@ int left_ik = 0;
 int right_ik = 0;
 float link3_corrections[2]; // corrections to link 3 angles based on difference in proximity measurements
 float x2, y2, l4, gamma, alpha1, alpha2;  
-float pos_eps = 0.5; // exponential return to the default pose
+float pos_eps = 0.3; // exponential return to the default pose
 float l_diff, l_avg, r_diff, r_avg; // values for internal sensors
 
 // takes joint angles and populates finger kinematics x,y,theta
@@ -379,11 +380,14 @@ int main() {
             if (range_status[i]==0){ // good measurement
                 if (range_m[i]==0.0f){ //==0.2f
                     range_m[i] = ((float)range[i])/1000.0f;
+
                 } else {
                     range_m[i] = 0.2f*(((float)range[i])/1000.0f) + 0.8f*range_m[i];
                 }
+                range_m_raw[i] = ((float)range[i])/1000.0f;
             } else {
                 range_m[i] = 0.2f;
+                range_m_raw[i] = 0.2f;
             }
         }
 
@@ -442,9 +446,9 @@ int main() {
         }
         if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
             left_ik = 1;
-            l_avg = 0.5*(range_m[2]+range_m[3]);
-            pstar[0][0] += (l_avg-glide_thresh)*etip_left[2][0]; // x
-            pstar[0][1] += (l_avg-glide_thresh)*etip_left[2][1]; // y
+            l_avg = 0.5*(range_m_raw[2]+range_m_raw[3]);
+            pstar[0][0] += (l_avg-glide_dist)*etip_left[2][0]; // x
+            pstar[0][1] += (l_avg-glide_dist)*etip_left[2][1]; // y
         }
         if ((range_m[5]<corr_thresh)||(range_m[6]<corr_thresh)){ // if at least one of the sensors is activated for angle correction
             r_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
@@ -457,9 +461,9 @@ int main() {
         }
         if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for gliding
             right_ik = 1;
-            r_avg = 0.5*(range_m[5]+range_m[6]);
-            pstar[1][0] += (r_avg-glide_thresh)*etip_right[2][0]; // x
-            pstar[1][1] += (r_avg-glide_thresh)*etip_right[2][1]; // y
+            r_avg = 0.5*(range_m_raw[5]+range_m_raw[6]);
+            pstar[1][0] += (r_avg-glide_dist)*etip_right[2][0]; // x
+            pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
         }
 
         // // Calculate "avoidance" movements for outer sensors
@@ -510,7 +514,13 @@ int main() {
             // TODO: change to taking steps towards the nominal pose?
             new_pos[0] = conv_pos[0] + pos_eps*(default_pos[0]-conv_pos[0]);
             new_pos[1] = conv_pos[1] + pos_eps*(default_pos[1]-conv_pos[1]);
-            new_pos[2] = conv_pos[2] + pos_eps*(default_pos[2]-conv_pos[2]);
+            new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
+            if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
+                new_pos[2] = conv_pos[2] + link3_delta_limit;
+            } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
+                new_pos[2] = conv_pos[2] - link3_delta_limit;
+            }
+
         }
         if (right_ik==1){
             // calculate ik based on pstar
@@ -543,31 +553,36 @@ int main() {
             // TODO: change to taking steps towards the nominal pose?
             new_pos[3] = conv_pos[3] + pos_eps*(default_pos[3]-conv_pos[3]);
             new_pos[4] = conv_pos[4] + pos_eps*(default_pos[4]-conv_pos[4]);
-            new_pos[5] = conv_pos[5] + pos_eps*(default_pos[5]-conv_pos[5]);
+            new_pos[5] = link3_corrections[1]-default_pos[3]-default_pos[4];
+            if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){
+                new_pos[5] = conv_pos[5] + link3_delta_limit;
+            } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
+                new_pos[5] = conv_pos[5] - link3_delta_limit;
+            }
         }
 
 
         // set new desired joint positions (in counts)
         for (int i=0; i<num_IDs; i++){
-            // des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad); // use ik positions
-            des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad); // just hold default positions
+            des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad); // use ik positions
+            // des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad); // just hold default positions
         }
 
         // set link 3 angles correctly, checking that the change in angle isn't too large
-        new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
-        if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
-            new_pos[2] = conv_pos[2] + link3_delta_limit;
-        } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
-            new_pos[2] = conv_pos[2] - link3_delta_limit;
-        }
-        new_pos[5] = link3_corrections[1]-default_pos[3]-default_pos[4];
-        if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){
-            new_pos[5] = conv_pos[5] + link3_delta_limit;
-        } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
-            new_pos[5] = conv_pos[5] - link3_delta_limit;
-        }
-        des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
-        des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
+        // new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
+        // if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
+        //     new_pos[2] = conv_pos[2] + link3_delta_limit;
+        // } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
+        //     new_pos[2] = conv_pos[2] - link3_delta_limit;
+        // }
+        // new_pos[5] = link3_corrections[1]-default_pos[3]-default_pos[4];
+        // if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){
+        //     new_pos[5] = conv_pos[5] + link3_delta_limit;
+        // } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
+        //     new_pos[5] = conv_pos[5] - link3_delta_limit;
+        // }
+        // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
+        // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
 
         dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
