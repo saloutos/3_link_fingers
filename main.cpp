@@ -584,7 +584,7 @@ int main() {
         // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
         // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
 
-        dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
+        // dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
         // loop takes about 5.5ms without printing
 
