@@ -1,4 +1,4 @@
-// example i2c code for reading proximity data from VCNL36826S sensor
+// controlling two 3-link fingers with lab force sensors and 9 total time-of-flight sensors
 
 #include "mbed.h"
 #include "string.h"
@@ -537,7 +537,7 @@ int main() {
             gamma = atan2(y2,x2);
             alpha1 = acos(((l1*l1+l4*l4-l2*l2)/(2.0f*l1*l4)));
             alpha2 = acos(((l1*l1+l2*l2-l4*l4)/(2.0f*l1*l2)));
-            pc.printf("%f, %f, %f, %f, %f, %f, %f, %f, %f\n\r", range_m[5], range_m[6], link3_corrections[1], x2, y2, l4, gamma, alpha1, alpha2);
+            // pc.printf("%f, %f, %f, %f, %f, %f, %f, %f, %f\n\r", range_m[5], range_m[6], link3_corrections[1], x2, y2, l4, gamma, alpha1, alpha2);
             if ((!isnan(gamma))&&(!isnan(alpha1))&&(!isnan(alpha2))) {
                 new_pos[3] = gamma - alpha1;
                 new_pos[4] = 3.14159f-alpha2;
@@ -568,7 +568,7 @@ int main() {
             // des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad); // just hold default positions
         }
 
-        // set link 3 angles correctly, checking that the change in angle isn't too large
+        // // set link 3 angles correctly, checking that the change in angle isn't too large
         // new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
         // if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
         //     new_pos[2] = conv_pos[2] + link3_delta_limit;
@@ -584,27 +584,27 @@ int main() {
         // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
         // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
 
-        dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
+        // dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
         // loop takes about 5.5ms without printing
 
         t2.reset();
         // printing data takes about 4ms at baud of 460800
         // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
-        // pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
         
         // pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
         
         // pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
 
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
 
         // print desired joint positions and forward kinematics instead of force sensor values
-        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
-        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
 
         // TODO: only print every five or ten loops?
         // pc.printf("%d, %d\n\r\n\r", samp4, samp5);
