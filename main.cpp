@@ -99,6 +99,8 @@ float p[2][3];
 float v[2][3];
 float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
+float J_left[3][3]; // 
+float J_right[3][3]; // 
 float pstar[2][2]; // desired change in end-effector position
 float prox_thresh = 0.030f; // avoidance threshold
 float glide_thresh = 0.060f; // glide threshold
@@ -410,6 +412,18 @@ int main() {
         etip_left[2][0] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
         etip_left[2][1] = -cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
 
+        //Jacobian for Left 
+        J_left[0][0] = -l1*sin(conv_pos[0]) -l2*sin(conv_pos[0]+conv_pos[1]) - l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq1/dx with q1=conv_pos[0] or base
+        J_left[0][1] = -l2*sin(conv_pos[0]+conv_pos[1]) -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq2/dx with q2=conv_pos[1]
+        J_left[0][2] = -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq3/dx with q3=conv_pos[2]
+        J_left[1][0] =  l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq1/dy
+        J_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq2/dy
+        J_left[1][2] =  l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq3/dy
+        J_left[2][0] = 1.0f;
+        J_left[2][1] = 1.0f;
+        J_left[2][2] = 1.0f;
+
+        // evaluate forward kinematics
         p[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right x
         p[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]) + l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right y
         p[1][2] = conv_pos[3]+conv_pos[4]+conv_pos[5]; // right theta
@@ -419,6 +433,17 @@ int main() {
         etip_right[1][1] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
         etip_right[2][0] = -sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
         etip_right[2][1] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+
+        //Jacobian for right 
+        J_right[0][0] = -l1*sin(conv_pos[3]) -l2*sin(conv_pos[3]+conv_pos[4]) - l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq1/dx with q1=conv_pos[0] or base
+        J_right[0][1] = -l2*sin(conv_pos[3]+conv_pos[4]) -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq2/dx with q2=conv_pos[1]
+        J_right[0][2] = -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq3/dx with q3=conv_pos[2]
+        J_right[1][0] =  l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq1/dy
+        J_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq2/dy
+        J_right[1][2] =  l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq3/dy
+        J_right[2][0] = 1.0f;
+        J_right[2][1] = 1.0f;
+        J_right[2][2] = 1.0f;
 
         // check sensor values against proximity threshold
         // if threshold is violated, calculate necessary inverse kinematics solution
@@ -465,6 +490,8 @@ int main() {
             pstar[1][0] += (r_avg-glide_dist)*etip_right[2][0]; // x
             pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
         }
+
+        
 
         // // Calculate "avoidance" movements for outer sensors
         // for (int i=0; i<2; i++){ // left finger sensors: (out,fw) range[0], range[1]
