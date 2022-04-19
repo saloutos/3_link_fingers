@@ -686,7 +686,7 @@ int main() {
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
         */
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f \n\r", range_m[2], range_m[3], tau_left[0][0], tau_left[1][0], tau_left[2][0]); 
+        pc.printf("%2.3f, %.2f, %2.3f, %2.3f, %2.3f, %2.3f \n\r", t3.read(), range_m[2], range_m[3], tau_left[0][0], tau_left[1][0], tau_left[2][0]); 
         // printing data takes about 4ms at baud of 460800
         // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
         // pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
