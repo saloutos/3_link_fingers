@@ -76,8 +76,10 @@ int range[9];
 float range_m[9]; // range in m
 float range_m_raw[9]; // range in m, non-filtered
 int range_status[9];
+int range_mode[9];
 uint8_t MUX_ADDR = (0x70<<1);
-uint16_t range_period = 20;
+uint16_t range_period = 30;
+float filt_coef = 0.70f;
 
 // timer stuff
 Timer t;
@@ -196,10 +198,10 @@ int main() {
     if(!tof1.begin(&i2c2)){
         pc.printf("Sensor 1 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof1.stopRangeContinuous();
-    // wait_us(1000);
-    // tof1.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof1.readRangeMode()==0){
+        tof1.startRangeContinuous(range_period);
+    }
     wait_us(10000);
     pc.printf("Sensor 2...\n\r");
     set_mux2(3); // channel 3 on mux 2
@@ -207,10 +209,10 @@ int main() {
     if(!tof2.begin(&i2c2)){
         pc.printf("Sensor 2 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof2.stopRangeContinuous();
-    // wait_us(1000);
-    // tof2.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof2.readRangeMode()==0){
+        tof2.startRangeContinuous(range_period);
+    }
     wait_us(10000);
 
 
@@ -220,10 +222,10 @@ int main() {
     if(!tof3.begin(&i2c2)){
         pc.printf("Sensor 3 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof3.stopRangeContinuous();
-    // wait_us(1000);
-    // tof3.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof3.readRangeMode()==0){
+        tof3.startRangeContinuous(range_period);
+    }
     wait_us(100000);
     pc.printf("Sensor 4...\n\r");
     set_mux2(5); // channel 5 on mux 2 
@@ -231,10 +233,10 @@ int main() {
     if(!tof4.begin(&i2c2)){
         pc.printf("Sensor 4 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof4.stopRangeContinuous();
-    // wait_us(1000);
-    // tof4.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof4.readRangeMode()==0){
+        tof4.startRangeContinuous(range_period);
+    }
     wait_us(10000);
 
 
@@ -244,10 +246,10 @@ int main() {
     if(!tof5.begin(&i2c2)){
         pc.printf("Sensor 5 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof5.stopRangeContinuous();
-    // wait_us(1000);
-    // tof5.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof5.readRangeMode()==0){
+        tof5.startRangeContinuous(range_period);
+    }
     wait_us(10000);
 
 
@@ -257,10 +259,10 @@ int main() {
     if(!tof6.begin(&i2c1)){
         pc.printf("Sensor 6 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof6.stopRangeContinuous();
-    // wait_us(1000);
-    // tof6.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof6.readRangeMode()==0){
+        tof6.startRangeContinuous(range_period);
+    }
     wait_us(10000);
     pc.printf("Sensor 7...\n\r");
     set_mux1(2); // channel 2 on mux 1
@@ -268,10 +270,10 @@ int main() {
     if(!tof7.begin(&i2c1)){
         pc.printf("Sensor 7 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof7.stopRangeContinuous();
-    // wait_us(1000);
-    // tof7.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof7.readRangeMode()==0){
+        tof7.startRangeContinuous(range_period);
+    }
     wait_us(10000);
 
 
@@ -281,10 +283,10 @@ int main() {
     if(!tof8.begin(&i2c1)){
         pc.printf("Sensor 8 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof8.stopRangeContinuous();
-    // wait_us(1000);
-    // tof8.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof8.readRangeMode()==0){
+        tof8.startRangeContinuous(range_period);
+    }
     wait_us(10000);
     pc.printf("Sensor 9...\n\r");
     set_mux1(4); // channel 4 on mux 1
@@ -292,10 +294,10 @@ int main() {
     if(!tof9.begin(&i2c1)){
         pc.printf("Sensor 9 init failed.\n\r");
     }
-    // wait_us(1000);
-    // tof9.stopRangeContinuous();
-    // wait_us(1000);
-    // tof9.startRangeContinuous(range_period);
+    wait_us(1000);
+    if(tof9.readRangeMode()==0){
+        tof9.startRangeContinuous(range_period);
+    }
     wait_us(10000);
 
     left_finger.Initialize();
@@ -333,63 +335,108 @@ int main() {
         t2.reset();
         // reading all of the continuous range measurements takes about 2ms with current wait times
         // TODO: could remove range status reading to speed up?
-        // set_mux2(2);
-        // wait_us(10);
-        // range[0] = tof1.readRange(); //Result();
-        // wait_us(10);
-        // range_status[0] = tof1.readRangeStatus();
-        // wait_us(10);
+        set_mux2(2);
+        if (tof1.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[0] = tof1.readRangeStatus();
+            wait_us(10);
+            range_mode[0] = tof1.readRangeMode();
+            wait_us(10);
+            range[0] = tof1.readRangeResult();
+            wait_us(10);
+        }
         // set_mux2(3);
-        // wait_us(10);
-        // range[1] = tof2.readRange(); //Result();
-        // wait_us(10);
-        // range_status[1] = tof2.readRangeStatus();
-        // wait_us(10);
+        if (tof2.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[1] = tof2.readRangeStatus();
+            wait_us(10);
+            range_mode[1] = tof2.readRangeMode();
+            wait_us(10);
+            range[1] = tof2.readRangeResult();
+            wait_us(10);
+        }
         set_mux2(4);
-        wait_us(10);
-        range[2] = tof3.readRange(); //Result();
-        wait_us(10);
-        range_status[2] = tof3.readRangeStatus();
-        wait_us(10);
+        if (tof3.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[2] = tof3.readRangeStatus();
+            wait_us(10);
+            range_mode[2] = tof3.readRangeMode();
+            wait_us(10);
+            range[2] = tof3.readRangeResult();
+            wait_us(10);
+        }
         set_mux2(5);
-        wait_us(10);
-        range[3] = tof4.readRange(); //Result();
-        wait_us(10);
-        range_status[3] = tof4.readRangeStatus();
-        wait_us(10);
+        if (tof4.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[3] = tof4.readRangeStatus();
+            wait_us(10);
+            range_mode[3] = tof4.readRangeMode();
+            wait_us(10);
+            range[3] = tof4.readRangeResult();
+            wait_us(10);
+        }
         set_mux2(1);
-        wait_us(10);
-        range[4] = tof5.readRange(); //Result();
-        wait_us(10);
-        range_status[4] = tof5.readRangeStatus();
-        wait_us(10);
+        if (tof5.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[4] = tof5.readRangeStatus();
+            wait_us(10);
+            range_mode[4] = tof5.readRangeMode();
+            wait_us(10);
+            range[4] = tof5.readRangeResult();
+            wait_us(10);
+        }
         samp1 = t2.read_us();
 
         t2.reset();
         set_mux1(5);
-        wait_us(10);
-        range[5] = tof6.readRange(); //Result();
-        wait_us(10);
-        range_status[5] = tof6.readRangeStatus();
-        wait_us(10);
+        if (tof6.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[5] = tof6.readRangeStatus();
+            wait_us(10);
+            range_mode[5] = tof6.readRangeMode();
+            wait_us(10);
+            range[5] = tof6.readRangeResult();
+            wait_us(10);
+        }
         set_mux1(2);
-        wait_us(10);
-        range[6] = tof7.readRange(); //Result();
-        wait_us(10);
-        range_status[6] = tof7.readRangeStatus();
-        wait_us(10);
-        // set_mux1(3);
-        // wait_us(10);
-        // range[7] = tof8.readRange(); //Result();
-        // wait_us(10);
-        // range_status[7] = tof8.readRangeStatus();
-        // wait_us(10);
-        // set_mux1(4);
-        // wait_us(10);
-        // range[8] = tof9.readRange(); //Result();
-        // wait_us(10);
-        // range_status[8] = tof9.readRangeStatus();
-        // wait_us(10);
+        if (tof7.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[6] = tof7.readRangeStatus();
+            wait_us(10);
+            range_mode[6] = tof7.readRangeMode();
+            wait_us(10);
+            range[6] = tof7.readRangeResult();
+            wait_us(10);
+        }
+        set_mux1(3);
+        if (tof8.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[7] = tof8.readRangeStatus();
+            wait_us(10);
+            range_mode[7] = tof8.readRangeMode();
+            wait_us(10);
+            range[7] = tof8.readRangeResult();
+            wait_us(10);
+        }
+        set_mux1(4);
+        if (tof9.isRangeComplete()){
+            // if it is ready, get range status, mode, and result
+            wait_us(10);
+            range_status[8] = tof9.readRangeStatus();
+            wait_us(10);
+            range_mode[8] = tof9.readRangeMode();
+            wait_us(10);
+            range[8] = tof9.readRangeResult();
+            wait_us(10);
+        }
         samp2 = t2.read_us();
 
         // convert range measurements to meters and do some filtering
@@ -399,7 +446,7 @@ int main() {
                     range_m[i] = ((float)range[i])/1000.0f;
 
                 } else {
-                    range_m[i] = 0.2f*(((float)range[i])/1000.0f) + 0.8f*range_m[i];
+                    range_m[i] = filt_coef*(((float)range[i])/1000.0f) + (1.0f-filt_coef)*range_m[i];
                 }
                 range_m_raw[i] = ((float)range[i])/1000.0f;
             } else {
