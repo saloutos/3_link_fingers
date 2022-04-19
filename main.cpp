@@ -29,6 +29,7 @@ float default_pos[] = {1.0f, -1.8f, 1.3f, -1.0f, 1.8f, -1.3f}; // nominal joint 
 float link3_angles_des[] = {0.5f, -0.5f}; // [left,right] in world reference frame
 float new_pos[6];
 uint32_t des_pos[6];
+uint16_t des_cur[6];
 
 // Left finger force sensor
 SPI spi1(PE_6, PE_5, PE_2); // MOSI, MISO, SCK
@@ -100,7 +101,13 @@ float v[2][3];
 float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
 float J_left[3][3]; // 
+float JT_left[3][3]; // 
+float tau_left[3][1];
+float des_left[3][1];
 float J_right[3][3]; // 
+float JT_right[3][3]; // 
+float tau_right[3][1];
+float des_right[3][1];
 float pstar[2][2]; // desired change in end-effector position
 float prox_thresh = 0.030f; // avoidance threshold
 float glide_thresh = 0.060f; // glide threshold
@@ -146,6 +153,13 @@ void set_mux2(uint8_t channel){
     // pc.printf("M: 2, C: %d, r: %d\n\r", channel, result);
 }
 
+void mult33x31(float Rout[3][1], float R1[3][3], float R2[3][1]){
+    // multiply 3x3 by 3x1
+    Rout[0][0] = R1[0][0]*R2[0][0] + R1[0][1]*R2[1][0] + R1[0][2]*R2[2][0];
+    Rout[1][0] = R1[1][0]*R2[0][0] + R1[1][1]*R2[1][0] + R1[1][2]*R2[2][0];
+    Rout[2][0] = R1[2][0]*R2[0][0] + R1[2][1]*R2[1][0] + R1[2][2]*R2[2][0];
+}
+
 // main loop
 int main() {
     
@@ -166,7 +180,8 @@ int main() {
         pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
         dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
         dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
-        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
+        //dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
+        dxl_bus.SetControlMode(dxl_IDs[i], CURRENT_CONTROL);
         wait_us(100);
         // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
         // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
@@ -445,6 +460,14 @@ int main() {
         J_right[2][1] = 1.0f;
         J_right[2][2] = 1.0f;
 
+        //Jacobian transpose for both left and right   
+        for (int i=0; i<3; i++){
+            for (int j=0; j<3; j++){
+                JT_right[i][j]=J_right[j][i];
+                JT_left[i][j]=J_left[j][i];
+            }
+        }
+
         // check sensor values against proximity threshold
         // if threshold is violated, calculate necessary inverse kinematics solution
         pstar[0][0] = p[0][0]; // reset pstar and ik flags
@@ -491,7 +514,6 @@ int main() {
             pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
         }
 
-        
 
         // // Calculate "avoidance" movements for outer sensors
         // for (int i=0; i<2; i++){ // left finger sensors: (out,fw) range[0], range[1]
@@ -511,6 +533,9 @@ int main() {
 
         // use inverse kinematics to calculate new joint positions (in radians)
         // TODO: make inverse kinematics more robust! (use received angles for initial calculations?)
+
+        //Comment out old IK
+        /*
         if (left_ik==1){
             // calculate ik based on pstar
             // link3_corrections[0] = link3_corrections[0] - conv_pos[0] - conv_pos[1]; // convert to joint angle to limit movement
@@ -588,12 +613,51 @@ int main() {
             }
         }
 
+        */
 
+        if (left_ik==1){
+            des_left[0][0]=400.0f*(pstar[0][0]-p[0][0]); //x position of left x, gain* (desired- actual)
+            des_left[1][0]=400.0f*(pstar[0][1]-p[0][1]); //y position of left y, gain* (desired - actual)
+            des_left[2][0]=150.0f*(link3_corrections[0]-p[0][2]); //theta of left, gain* (desired- actual)
+            mult33x31(tau_left, JT_left, des_left); //get tau left
+            //pc.printf("left ik \n\r");
+        }
+        else {
+            tau_left[0][0]=0.0f;
+            tau_left[1][0]=0.0f;
+            tau_left[2][0]=0.0f;
+        }
+
+        if (right_ik==1){
+            des_right[0][0]=100.0f*(pstar[1][0]-p[1][0]); //x position of left, gain* (desired- actual)
+            des_right[1][0]=100.0f*(pstar[1][1]-p[1][1]); //y position of left, gain* (desired - actual)
+            des_right[2][0]=100.0f*(link3_corrections[1]-p[1][2]); //theta of left, gain* (desired- actual)
+            mult33x31(tau_right, JT_right, des_right); //get tau left
+        }
+        else {
+            tau_right[0][0]=0.0f;
+            tau_right[1][0]=0.0f;
+            tau_right[2][0]=0.0f;
+        }
+        
+        des_cur[0]=(int16_t)tau_left[0][0];
+        des_cur[1]=(int16_t)tau_left[1][0];
+        des_cur[2]=(int16_t)tau_left[2][0];
+        des_cur[3]=(int16_t)tau_right[0][0];
+        des_cur[4]=(int16_t)tau_right[1][0];
+        des_cur[5]=(int16_t)tau_right[2][0];
+
+
+        /*
         // set new desired joint positions (in counts)
         for (int i=0; i<num_IDs; i++){
-            des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad); // use ik positions
+            //des_pos[i] = (uint32_t)((new_pos[i]+dxl_offsets[i])/pulse_to_rad); // use ik positions
+            des_cur[i] = (uint16_t);
             // des_pos[i] = (uint32_t)((default_pos[i]+dxl_offsets[i])/pulse_to_rad); // just hold default positions
         }
+        */
+
+        dxl_bus.SetMultGoalCurrents(dxl_IDs, num_IDs, des_cur);
 
         // // set link 3 angles correctly, checking that the change in angle isn't too large
         // new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
@@ -611,27 +675,28 @@ int main() {
         // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
         // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
 
-        dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
+        //dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
         // loop takes about 5.5ms without printing
 
         t2.reset();
+         /*
+        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
+        */
+        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f \n\r", range_m[2], range_m[3], tau_left[0][0], tau_left[1][0], tau_left[2][0]); 
         // printing data takes about 4ms at baud of 460800
         // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
-        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, ", t3.read(), samp1, samp2, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
-        
         // pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
         
         // pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
         // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
 
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
         // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
-
         // print desired joint positions and forward kinematics instead of force sensor values
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
 
         // TODO: only print every five or ten loops?
         // pc.printf("%d, %d\n\r\n\r", samp4, samp5);
