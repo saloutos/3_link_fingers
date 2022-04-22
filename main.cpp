@@ -72,11 +72,22 @@ VL6180X tof7; // right finger inner distal
 VL6180X tof8; // right finger forward
 VL6180X tof9; // right finger outer
 
+DigitalOut xs1(PF_5); // reset for sensor 1
+DigitalOut xs2(PF_4);
+DigitalOut xs3(PE_8);
+DigitalOut xs4(PF_10);
+DigitalOut xs5(PE_7);
+DigitalOut xs6(PD_14);
+DigitalOut xs7(PD_15);
+DigitalOut xs8(PF_14);
+DigitalOut xs9(PE_9);
+
 int range[9];
 float range_m[9]; // range in m
 float range_m_raw[9]; // range in m, non-filtered
 int range_status[9];
 int range_mode[9];
+int range_offsets[] = {4, 8, 9, 10, 5, 0, 0, 10, 3}; // offsets in mm to be added to range measurements
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
 float filt_coef = 0.70f;
@@ -168,7 +179,7 @@ int main() {
     // start up
 
     // wait(3.0);
-
+    wait_us(50000);
 
     pc.printf("Initializing.\n\r");
     
@@ -188,18 +199,26 @@ int main() {
     pc.printf("Sensor 1...\n\r");
     set_mux2(2); // channel 2 on mux 2 
     wait_us(1000);
+    xs1 = 0;
+    wait_us(10000);
+    xs1 = 1;
+    wait_us(10000);
     if(!tof1.begin(&i2c2)){
         pc.printf("Sensor 1 init failed.\n\r");
     }
     wait_us(1000);
     pc.printf("Range mode: %d\n\r",tof1.readRangeMode());
-    if(tof1.readRangeMode()==0){
+    if(tof1.readRangeMode()==0){ // TODO: might be able to remove this check since we have the reset lines now
         tof1.startRangeContinuous(range_period);
     }
     wait_us(10000);
     pc.printf("Sensor 2...\n\r");
     set_mux2(3); // channel 3 on mux 2
     wait_us(1000);
+    xs2 = 0;
+    wait_us(10000);
+    xs2 = 1;
+    wait_us(10000);
     if(!tof2.begin(&i2c2)){
         pc.printf("Sensor 2 init failed.\n\r");
     }
@@ -214,6 +233,10 @@ int main() {
     pc.printf("Sensor 3...\n\r");
     set_mux2(4); // channel 4 on mux 2
     wait_us(1000);
+    xs3 = 0;
+    wait_us(10000);
+    xs3 = 1;
+    wait_us(10000);
     if(!tof3.begin(&i2c2)){
         pc.printf("Sensor 3 init failed.\n\r");
     }
@@ -225,6 +248,10 @@ int main() {
     pc.printf("Sensor 4...\n\r");
     set_mux2(5); // channel 5 on mux 2 
     wait_us(1000);
+    xs4 = 0;
+    wait_us(10000);
+    xs4 = 1;
+    wait_us(10000);
     if(!tof4.begin(&i2c2)){
         pc.printf("Sensor 4 init failed.\n\r");
     }
@@ -238,6 +265,10 @@ int main() {
     pc.printf("Sensor 5...\n\r");
     set_mux2(1); // channel 1 on mux 2
     wait_us(1000);
+    xs5 = 0;
+    wait_us(10000);
+    xs5 = 1;
+    wait_us(10000);
     if(!tof5.begin(&i2c2)){
         pc.printf("Sensor 5 init failed.\n\r");
     }
@@ -251,6 +282,10 @@ int main() {
     pc.printf("Sensor 6...\n\r");
     set_mux1(5); // channel 5 on mux 1
     wait_us(1000);
+    xs6 = 0;
+    wait_us(10000);
+    xs6 = 1;
+    wait_us(10000);
     if(!tof6.begin(&i2c1)){
         pc.printf("Sensor 6 init failed.\n\r");
     }
@@ -262,6 +297,10 @@ int main() {
     pc.printf("Sensor 7...\n\r");
     set_mux1(2); // channel 2 on mux 1
     wait_us(1000);
+    xs7 = 0;
+    wait_us(10000);
+    xs7 = 1;
+    wait_us(10000);
     if(!tof7.begin(&i2c1)){
         pc.printf("Sensor 7 init failed.\n\r");
     }
@@ -275,6 +314,10 @@ int main() {
     pc.printf("Sensor 8...\n\r");
     set_mux1(3); // channel 3 on mux 1
     wait_us(1000);
+    xs8 = 0;
+    wait_us(10000);
+    xs8 = 1;
+    wait_us(10000);
     if(!tof8.begin(&i2c1)){
         pc.printf("Sensor 8 init failed.\n\r");
     }
@@ -286,6 +329,10 @@ int main() {
     pc.printf("Sensor 9...\n\r");
     set_mux1(4); // channel 4 on mux 1
     wait_us(1000);
+    xs9 = 0;
+    wait_us(10000);
+    xs9 = 1;
+    wait_us(10000);
     if(!tof9.begin(&i2c1)){
         pc.printf("Sensor 9 init failed.\n\r");
     }
@@ -296,20 +343,20 @@ int main() {
     wait_us(10000);
 
     
-    pc.printf("Initializing Dynamixels.\n\r");
-    // Enable dynamixels and set control mode...individual version
-    for(int i=0; i<6; i++){
-        pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
-        dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
-        dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
-        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
-        // dxl_bus.SetControlMode(dxl_IDs[i], CURRENT_CONTROL);
-        wait_us(100);
-        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
-        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
-        dxl_bus.SetTorqueEn(dxl_IDs[i], 0x01); //to be able to move 
-        wait_us(100);
-    } 
+    // pc.printf("Initializing Dynamixels.\n\r");
+    // // Enable dynamixels and set control mode...individual version
+    // for(int i=0; i<6; i++){
+    //     pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
+    //     dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
+    //     dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
+    //     dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
+    //     // dxl_bus.SetControlMode(dxl_IDs[i], CURRENT_CONTROL);
+    //     wait_us(100);
+    //     // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
+    //     // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
+    //     // dxl_bus.SetTorqueEn(dxl_IDs[i], 0x01); //to be able to move 
+    //     wait_us(100);
+    // } 
 
 
 
@@ -323,8 +370,6 @@ int main() {
     t3.start(); 
 
     while (1) {
-
-        wait_us(50000);
 
         t.reset();
                     
@@ -450,12 +495,12 @@ int main() {
         for(int i=0; i<9; i++){
             if (range_status[i]==0){ // good measurement
                 if (range_m[i]==0.0f){ //==0.2f
-                    range_m[i] = ((float)range[i])/1000.0f;
+                    range_m[i] = ((float)(range[i]+range_offsets[i]))/1000.0f;
 
                 } else {
-                    range_m[i] = filt_coef*(((float)range[i])/1000.0f) + (1.0f-filt_coef)*range_m[i];
+                    range_m[i] = filt_coef*(((float)(range[i]+range_offsets[i]))/1000.0f) + (1.0f-filt_coef)*range_m[i];
                 }
-                range_m_raw[i] = ((float)range[i])/1000.0f;
+                range_m_raw[i] = ((float)(range[i]+range_offsets[i]))/1000.0f;
             } else {
                 range_m[i] = 0.2f;
                 range_m_raw[i] = 0.2f;
@@ -464,13 +509,13 @@ int main() {
 
 
         
-        t2.reset();        
-        dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
-        // convert states
-        for(int i=0; i<num_IDs; i++){
-            conv_pos[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
-        }
-        samp3 = t2.read_us();
+        // t2.reset();        
+        // dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
+        // // convert states
+        // for(int i=0; i<num_IDs; i++){
+        //     conv_pos[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
+        // }
+        // samp3 = t2.read_us();
 
         // // evaluate forward kinematics
         // p[0][0] = l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x
@@ -737,13 +782,13 @@ int main() {
         // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
         // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
 
-        dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
+        // dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
 
         // loop takes about 5.5ms without printing
 
         t2.reset();
         
-        pc.printf("%.2f, %d, %d, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", t3.read(), samp4, samp5, range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        pc.printf("%.2f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
         /*
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
         pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
