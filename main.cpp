@@ -61,7 +61,8 @@ ForceSensor right_finger(2, &sensor28); // class is modified to use new digital 
 // ToF sensor i2c busses
 I2C i2c1(PF_0, PF_1); //(PB_9, PB_8); // SDA, SCL
 I2C i2c2(PD_13, PD_12); 
-// initialize sensors
+
+// initialize ToF sensors
 VL6180X tof1; // left finger outer
 VL6180X tof2; // left finger forward
 VL6180X tof3; // left finger inner distal
@@ -122,10 +123,10 @@ float JT_right[3][3]; //
 float tau_right[3][1];
 float des_right[3][1];
 float pstar[2][2]; // desired change in end-effector position
-float prox_thresh = 0.030f; // avoidance threshold
+float prox_thresh = 0.030f; // avoidance threshold for older avoiding using outer sensor experiment 
 float glide_thresh = 0.060f; // glide threshold
 float corr_thresh = 0.080f; // link 3 correction threshold
-float ang_thresh = 0.0f; // angle threshold, in mm difference
+float ang_thresh = 0.0f; // angle threshold, in mm difference 
 float ang_max = 1.5; // maximum angle correction from nominal
 float ang_min = -1.5; // minimum angle correction from nominal
 float glide_dist = 0.030f; // desired contact distance for gliding/contour following
@@ -136,16 +137,6 @@ float link3_corrections[2]; // corrections to link 3 angles based on difference 
 float x2, y2, l4, gamma, alpha1, alpha2;  
 float pos_eps = 0.3; // exponential return to the default pose
 float l_diff, l_avg, r_diff, r_avg; // values for internal sensors
-
-// takes joint angles and populates finger kinematics x,y,theta
-// void kinematics(){
-//
-// }
-
-// takes finger number, finger pose (x,y,theta) and returns corresponding joint angles
-// void inverse_kinematics(){
-// 
-// }
 
 // Helper functions for i2c
 void set_mux1(uint8_t channel){
@@ -343,22 +334,20 @@ int main() {
     wait_us(10000);
 
     
-    // pc.printf("Initializing Dynamixels.\n\r");
-    // // Enable dynamixels and set control mode...individual version
-    // for(int i=0; i<6; i++){
-    //     pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
-    //     dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
-    //     dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
-    //     dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
-    //     // dxl_bus.SetControlMode(dxl_IDs[i], CURRENT_CONTROL);
-    //     wait_us(100);
-    //     // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
-    //     // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
-    //     // dxl_bus.SetTorqueEn(dxl_IDs[i], 0x01); //to be able to move 
-    //     wait_us(100);
-    // } 
-
-
+    pc.printf("Initializing Dynamixels.\n\r");
+    // Enable dynamixels and set control mode...individual version
+    for(int i=0; i<6; i++){
+        pc.printf("Motor ID %d.\n\r",dxl_IDs[i]);
+        dxl_bus.SetTorqueEn(dxl_IDs[i],0x00);    
+        dxl_bus.SetRetDelTime(dxl_IDs[i],0x32); // 4us delay time?
+        dxl_bus.SetControlMode(dxl_IDs[i], POSITION_CONTROL);
+        // dxl_bus.SetControlMode(dxl_IDs[i], CURRENT_CONTROL);
+        wait_us(100);
+        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x01);
+        // dxl_bus.TurnOnLED(dxl_IDs[i], 0x00); // turn off LED
+        // dxl_bus.SetTorqueEn(dxl_IDs[i], 0x01); //to be able to move 
+        wait_us(100);
+    } 
 
     pc.printf("Starting...\n\r");
 
@@ -372,9 +361,9 @@ int main() {
     while (1) {
 
         t.reset();
-                    
+        t2.reset();                    
+        
         // get force sensor data
-        t2.reset();
         left_finger.Sample();
         left_finger.Evaluate();
         wait_us(10);
@@ -384,8 +373,8 @@ int main() {
         samp0 = t2.read_us();
 
         // get data from TOF sensor
-        t2.reset();
-        // reading all of the continuous range measurements takes about 2ms with current wait times
+        t2.reset(); // reading all of the continuous range measurements takes about 2ms with current wait times
+
         // TODO: could remove range status reading to speed up?
         set_mux2(2);
         if (tof1.isRangeComplete()){
@@ -442,6 +431,7 @@ int main() {
             range[4] = tof5.readRangeResult();
             wait_us(10);
         }
+
         samp1 = t2.read_us();
 
         t2.reset();
@@ -509,57 +499,57 @@ int main() {
 
 
         
-        // t2.reset();        
-        // dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
-        // // convert states
-        // for(int i=0; i<num_IDs; i++){
-        //     conv_pos[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
-        // }
-        // samp3 = t2.read_us();
+        t2.reset();        
+        dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
+        // convert states
+        for(int i=0; i<num_IDs; i++){
+            conv_pos[i] = (pulse_to_rad*(float)dxl_pos[i])-dxl_offsets[i];
+        }
+        samp3 = t2.read_us();
 
-        // // evaluate forward kinematics
-        // p[0][0] = l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x
-        // p[0][1] = l_yoff + l1*sin(conv_pos[0]) + l2*sin(conv_pos[0]+conv_pos[1]) + l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left y
-        // p[0][2] = conv_pos[0]+conv_pos[1]+conv_pos[2]; // left theta
-        // etip_left[0][0] = -sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
-        // etip_left[0][1] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
-        // etip_left[1][0] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
-        // etip_left[1][1] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
-        // etip_left[2][0] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
-        // etip_left[2][1] = -cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        // evaluate forward kinematics
+        p[0][0] = l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x
+        p[0][1] = l_yoff + l1*sin(conv_pos[0]) + l2*sin(conv_pos[0]+conv_pos[1]) + l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left y
+        p[0][2] = conv_pos[0]+conv_pos[1]+conv_pos[2]; // left theta
+        etip_left[0][0] = -sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[0][1] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[1][0] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[1][1] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[2][0] = sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
+        etip_left[2][1] = -cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
 
-        // //Jacobian for Left 
-        // J_left[0][0] = -l1*sin(conv_pos[0]) -l2*sin(conv_pos[0]+conv_pos[1]) - l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq1/dx with q1=conv_pos[0] or base
-        // J_left[0][1] = -l2*sin(conv_pos[0]+conv_pos[1]) -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq2/dx with q2=conv_pos[1]
-        // J_left[0][2] = -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq3/dx with q3=conv_pos[2]
-        // J_left[1][0] =  l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq1/dy
-        // J_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq2/dy
-        // J_left[1][2] =  l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq3/dy
-        // J_left[2][0] = 1.0f;
-        // J_left[2][1] = 1.0f;
-        // J_left[2][2] = 1.0f;
+        //Jacobian for Left 
+        J_left[0][0] = -l1*sin(conv_pos[0]) -l2*sin(conv_pos[0]+conv_pos[1]) - l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq1/dx with q1=conv_pos[0] or base
+        J_left[0][1] = -l2*sin(conv_pos[0]+conv_pos[1]) -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq2/dx with q2=conv_pos[1]
+        J_left[0][2] = -l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);// dq3/dx with q3=conv_pos[2]
+        J_left[1][0] =  l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq1/dy
+        J_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq2/dy
+        J_left[1][2] =  l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // dq3/dy
+        J_left[2][0] = 1.0f;
+        J_left[2][1] = 1.0f;
+        J_left[2][2] = 1.0f;
 
-        // // evaluate forward kinematics
-        // p[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right x
-        // p[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]) + l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right y
-        // p[1][2] = conv_pos[3]+conv_pos[4]+conv_pos[5]; // right theta
-        // etip_right[0][0] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
-        // etip_right[0][1] = -cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
-        // etip_right[1][0] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
-        // etip_right[1][1] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
-        // etip_right[2][0] = -sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
-        // etip_right[2][1] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        // evaluate forward kinematics
+        p[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right x
+        p[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]) + l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right y
+        p[1][2] = conv_pos[3]+conv_pos[4]+conv_pos[5]; // right theta
+        etip_right[0][0] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[0][1] = -cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[1][0] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[1][1] = sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[2][0] = -sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);
+        etip_right[2][1] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
 
-        // //Jacobian for right 
-        // J_right[0][0] = -l1*sin(conv_pos[3]) -l2*sin(conv_pos[3]+conv_pos[4]) - l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq1/dx with q1=conv_pos[0] or base
-        // J_right[0][1] = -l2*sin(conv_pos[3]+conv_pos[4]) -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq2/dx with q2=conv_pos[1]
-        // J_right[0][2] = -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq3/dx with q3=conv_pos[2]
-        // J_right[1][0] =  l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq1/dy
-        // J_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq2/dy
-        // J_right[1][2] =  l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq3/dy
-        // J_right[2][0] = 1.0f;
-        // J_right[2][1] = 1.0f;
-        // J_right[2][2] = 1.0f;
+        //Jacobian for right 
+        J_right[0][0] = -l1*sin(conv_pos[3]) -l2*sin(conv_pos[3]+conv_pos[4]) - l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq1/dx with q1=conv_pos[0] or base
+        J_right[0][1] = -l2*sin(conv_pos[3]+conv_pos[4]) -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq2/dx with q2=conv_pos[1]
+        J_right[0][2] = -l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]);// dq3/dx with q3=conv_pos[2]
+        J_right[1][0] =  l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq1/dy
+        J_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq2/dy
+        J_right[1][2] =  l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // dq3/dy
+        J_right[2][0] = 1.0f;
+        J_right[2][1] = 1.0f;
+        J_right[2][2] = 1.0f;
 
         // //Jacobian transpose for both left and right   
         // for (int i=0; i<3; i++){
