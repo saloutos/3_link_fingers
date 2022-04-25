@@ -498,7 +498,6 @@ int main() {
         }
 
 
-        
         t2.reset();        
         dxl_bus.GetMultPositions(dxl_pos, dxl_IDs, num_IDs);
         // convert states
@@ -507,6 +506,7 @@ int main() {
         }
         samp3 = t2.read_us();
 
+        //new
         // evaluate forward kinematics
         p[0][0] = l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]) + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x
         p[0][1] = l_yoff + l1*sin(conv_pos[0]) + l2*sin(conv_pos[0]+conv_pos[1]) + l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left y
