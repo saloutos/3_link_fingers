@@ -127,6 +127,8 @@ float pstar[2][2]; // desired change in end-effector position
 float prox_thresh = 0.030f; // avoidance threshold for older avoiding using outer sensor experiment 
 float glide_thresh = 0.120f; // glide threshold
 float corr_thresh = 0.080f; // link 3 correction threshold
+float avoid_thresh_f = 0.070f; //avoidance threshold of forward
+float avoid_thresh_o = 0.060f; //avoidance threshold ofr both
 float ang_thresh = 0.0f; // angle threshold, in mm difference 
 float ang_max = 1.5; // maximum angle correction from nominal
 float ang_min = -1.5; // minimum angle correction from nominal
@@ -525,7 +527,7 @@ int main() {
         p2[0][2] = conv_pos[0]+conv_pos[1]; // left theta
         p[0][0] = p2[0][0] + l3*cos(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left x 
         p[0][1] = p2[0][1]+ l3*sin(conv_pos[0]+conv_pos[1]+conv_pos[2]); // left y // technically b
-        p[0][2] = p2[0][2] + conv_pos[2]; // left theta
+        p[0][2] = p2[0][2] + conv_pos[2]; // left theta distal in world frame
 
         etip_left[0][0] = -sin(conv_pos[0]+conv_pos[1]+conv_pos[2]);
         etip_left[0][1] = cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
@@ -541,8 +543,8 @@ int main() {
         J_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]); // dq2/dy
 
         // evaluate forward kinematics
-        p2[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]);
-        p2[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]);
+        p2[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]); //x
+        p2[1][1] = r_yoff + l1*sin(conv_pos[3]) + l2*sin(conv_pos[3]+conv_pos[4]); //y
         p2[1][2] = conv_pos[3]+conv_pos[4];
         p[1][0] = p2[1][0] + l3*cos(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right x
         p[1][1] = p2[1][1] + l3*sin(conv_pos[3]+conv_pos[4]+conv_pos[5]); // right y *technically off by 9mm to the center of sphere
@@ -562,8 +564,8 @@ int main() {
         J_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) ; // dq2/dy
 
         //Jacobian transpose for both left and right   
-        for (int i=0; i<3; i++){
-            for (int j=0; j<3; j++){
+        for (int i=0; i<2; i++){
+            for (int j=0; j<2; j++){
                 JT_right[i][j]=J_right[j][i];
                 JT_left[i][j]=J_left[j][i];
             }
@@ -583,7 +585,17 @@ int main() {
         l_avg = 0.0f;
         r_diff = 0.0f;
         r_avg = 0.0f;
+
+        Kp1= 10000*3; //with 60000 0 0 springy
+        Kp2= 50*3;
+        Kd = 0;//0.04;
         
+        tau_left[0][0]=0.0f;
+        tau_left[1][0]=0.0f;
+        tau_left[2][0]=0.0f;
+        tau_right[0][0]=0.0f;
+        tau_right[1][0]=0.0f;
+        tau_right[2][0]=0.0f;
 
         if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
             l_diff = fmaxf2( fminf2( range_m[3]-range_m[2], corr_thresh), -corr_thresh);
@@ -600,93 +612,67 @@ int main() {
                 pstar[0][1] += l_avg*etip_left[2][1]; // y: get from p to surface
                 pstar[0][1] += -glide_dist*-cos(link3_corrections[0]);// y: from surface to p of desired 
                 pstar[0][1] += -l3*sin(link3_corrections[0]);// y: from p of desired to p2 desired
+                
+                des_left[0][0]=Kp1*(pstar[0][0]-p2[0][0]); //x position of left x, gain* (desired- actual)
+                des_left[1][0]=Kp1*(pstar[0][1]-p2[0][1]); //y position of left y, gain* (desired - actual)
+                tau_left[0][0] = JT_left[0][0]*des_left[0][0] + JT_left[0][1]*des_left[1][0] ;
+                tau_left[1][0] = JT_left[1][0]*des_left[0][0] + JT_left[1][1]*des_left[1][0] ;
+                tau_left[2][0] =  Kp2 * (link3_corrections[0]-p[0][2]);
+                //pc.printf("left ik \n\r");
             } else{
                 pc.printf("Left Joint limits \n\r");
             }
 
         }
 
-        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for gliding 
+        
+
+        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ 
             l_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
             link3_corrections[1] = atan2(l_diff,linbw);
 
-            if (((link3_corrections[1] + conv_pos[5]) <ang_max) && ((link3_corrections[1] + conv_pos[5]) >ang_min)){ //checking if its past limit
-                link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min) + p[1][2]; //the angle of the normal in world frame by adding p[0][2]= angle of 3rd link
+            if (((link3_corrections[1] + conv_pos[5]) <ang_max) && ((link3_corrections[1] + conv_pos[5]) >ang_min)){ 
+                link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min) + p[1][2]; 
                 right_ik = 1;
                 r_avg = 0.5*(range_m_raw[5]+range_m_raw[6]);
-                pstar[1][0] += r_avg*etip_right[2][0]; // x: get from p to surface
-                pstar[1][0] += -glide_dist*sin(link3_corrections[1]); // x: from surface to p of desired 
-                pstar[1][0] += -l3*cos(link3_corrections[1]); // x: from p of desired to p2 desired
+                pstar[1][0] += r_avg*etip_right[2][0];
+                pstar[1][0] += -glide_dist*-sin(link3_corrections[1]);
+                pstar[1][0] += -l3*cos(link3_corrections[1]); 
             
-                pstar[1][1] += r_avg*etip_left[2][1]; // y: get from p to surface
-                pstar[1][1] += -glide_dist*-cos(link3_corrections[1]);// y: from surface to p of desired 
-                pstar[1][1] += -l3*sin(link3_corrections[1]);// y: from p of desired to p2 desired
+                pstar[1][1] += r_avg*etip_right[2][1]; 
+                pstar[1][1] += -glide_dist*cos(link3_corrections[1]);
+                pstar[1][1] += -l3*sin(link3_corrections[1]);
+
+                des_right[0][0]= 1* Kp1*(pstar[1][0]-p2[1][0]); //x position of left x, gain* (desired- actual)
+                des_right[1][0]= 1* Kp1*(pstar[1][1]-p2[1][1]); //y position of left y, gain* (desired - actual)
+                tau_right[0][0] = JT_right[0][0]*des_right[0][0] + JT_right[0][1]*des_right[1][0] ;
+                tau_right[1][0] = JT_right[1][0]*des_right[0][0] + JT_right[1][1]*des_right[1][0] ;
+                tau_right[2][0] =  1.5* Kp2 * (link3_corrections[1]-p[1][2]);
+            //pc.printf("left ik \n\r");
             } else{
                 pc.printf("Right joint limits \n\r");
             }
 
         }
 
+        if ((range_m[0]<avoid_thresh_o)||(range_m[1]<avoid_thresh_f)){ // LEFT SENSOR: if either back sensor less than avoidance
 
-        // if ((range_m[5]<corr_thresh)||(range_m[6]<corr_thresh)){ // if at least one of the sensors is activated for angle correction
-        //     r_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
-        //     if (abs(r_diff)>ang_thresh){
-        //         link3_corrections[1] = atan2(r_diff,linbw);
-        //         link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min);
-        //     }
-        // } else {
-        //     link3_corrections[1] = link3_angles_des[1];
-        // }
-        // if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ // if both sensors are activated for gliding
-        //     right_ik = 1;
-        //     r_avg = 0.5*(range_m_raw[5]+range_m_raw[6]);
-        //     pstar[1][0] += (r_avg-glide_dist)*etip_right[2][0]; // x
-        //     pstar[1][1] += (r_avg-glide_dist)*etip_right[2][1]; // y
-        // }
+            des_left[0][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -cos(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* sin(p[0][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
+            des_left[1][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -sin(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* -cos(p[0][2]));//y position 
+            tau_left[0][0] += JT_left[0][0]*des_left[0][0] + JT_left[0][1]*des_left[1][0] ;
+            tau_left[1][0] += JT_left[1][0]*des_left[0][0] + JT_left[1][1]*des_left[1][0] ;
 
-        Kp1= 10000*3; //with 60000 0 0 springy
-        Kp2= 50*3;
-        Kd = 0;//0.04;
-
-        if (left_ik==1){
-            des_left[0][0]=Kp1*(pstar[0][0]-p2[0][0]); //x position of left x, gain* (desired- actual)
-            des_left[1][0]=Kp1*(pstar[0][1]-p2[0][1]); //y position of left y, gain* (desired - actual)
-            tau_left[0][0] = JT_left[0][0]*des_left[0][0] + JT_left[0][1]*des_left[1][0] ;
-            tau_left[1][0] = JT_left[1][0]*des_left[0][0] + JT_left[1][1]*des_left[1][0] ;
-            tau_left[2][0] =  Kp2 * (link3_corrections[0]-p[0][2]);
-            //pc.printf("left ik \n\r");
         }
-        else {
-            tau_left[0][0]=0.0f;
-            tau_left[1][0]=0.0f;
-            tau_left[2][0]=0.0f;
+        if ((range_m[8]<avoid_thresh_o)||(range_m[7]<avoid_thresh_f)){ // RIGHT SENSORi: f either back sensor less than avoidance
+
+            des_right[0][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -cos(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* -sin(p[1][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
+            des_right[1][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -sin(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* cos(p[1][2]));//y position 
+            tau_right[0][0] += JT_right[0][0]*des_right[0][0] + JT_right[0][1]*des_right[1][0] ;
+            tau_right[1][0] += JT_right[1][0]*des_right[0][0] + JT_right[1][1]*des_right[1][0] ;
+
         }
 
-        if (right_ik==1){
-            des_right[0][0]= 3* Kp1*(pstar[1][0]-p2[1][0]); //x position of left x, gain* (desired- actual)
-            des_right[1][0]= 3* Kp1*(pstar[1][1]-p2[1][1]); //y position of left y, gain* (desired - actual)
-            tau_right[0][0] = JT_right[0][0]*des_right[0][0] + JT_right[0][1]*des_right[1][0] ;
-            tau_right[1][0] = JT_right[1][0]*des_right[0][0] + JT_right[1][1]*des_right[1][0] ;
-            tau_right[2][0] =  3* Kp2 * (link3_corrections[1]-p[1][2]);
-            //pc.printf("left ik \n\r");
-        }
-        else {
-            tau_right[0][0]=0.0f;
-            tau_right[1][0]=0.0f;
-            tau_right[2][0]=0.0f;
-        }
-        // if (right_ik==1){
-        //     des_right[0][0]=100.0f*(pstar[1][0]-p[1][0]); //x position of left, gain* (desired- actual)
-        //     des_right[1][0]=100.0f*(pstar[1][1]-p[1][1]); //y position of left, gain* (desired - actual)
-        //     des_right[2][0]=100.0f*(link3_corrections[1]-p[1][2]); //theta of left, gain* (desired- actual)
-        //     mult33x31(tau_right, JT_right, des_right); //get tau left
-        // }
-        // else {
-        //     tau_right[0][0]=0.0f;
-        //     tau_right[1][0]=0.0f;
-        //     tau_right[2][0]=0.0f;
-        // }
-        
+
         des_cur[0]=(int16_t)tau_left[0][0];
         des_cur[1]=(int16_t)tau_left[1][0];
         des_cur[2]=(int16_t)tau_left[2][0];
@@ -699,56 +685,15 @@ int main() {
 
     
 
-
-        // // set link 3 angles correctly, checking that the change in angle isn't too large
-        // new_pos[2] = link3_corrections[0]-default_pos[0]-default_pos[1];
-        // if ((new_pos[2]-conv_pos[2])>link3_delta_limit){
-        //     new_pos[2] = conv_pos[2] + link3_delta_limit;
-        // } else if ((new_pos[2]-conv_pos[2])<-link3_delta_limit){
-        //     new_pos[2] = conv_pos[2] - link3_delta_limit;
-        // }
-        // new_pos[5] = link3_corrections[1]-default_pos[3]-default_pos[4];
-        // if (new_pos[5]>(conv_pos[5]+link3_delta_limit)){
-        //     new_pos[5] = conv_pos[5] + link3_delta_limit;
-        // } else if (new_pos[5]<(conv_pos[5]-link3_delta_limit)){
-        //     new_pos[5] = conv_pos[5] - link3_delta_limit;
-        // }
-        // des_pos[2] = (uint32_t)((new_pos[2]+dxl_offsets[2])/pulse_to_rad);
-        // des_pos[5] = (uint32_t)((new_pos[5]+dxl_offsets[5])/pulse_to_rad);
-
-        // dxl_bus.SetMultGoalPositions(dxl_IDs, num_IDs, des_pos);
-
-        // loop takes about 5.5ms without printing
-
         t2.reset();
         
-        //pc.printf("%.2f, %1.3f, %1.3f, %1.4f, %1.4f, %1.3f, %1.4f, %1.4f, %1.3f, %1.3f\n\r", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        pc.printf("%.2f, %1.3f, %1.3f,    %1.4f, %1.4f,    %1.3f,    %1.4f, %1.4f,   %1.3f, %1.3f\n\r", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
         //pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
-        //pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[2], range_m[3], p[0][0], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]);
-        pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]);
+        //pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[2], range_m[3], p[0][0], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); //left side
+//        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]);
+//        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor  
+        //pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[8], range_m[7], p[1][2], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //
 
-        /*
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", p[0][0], p[0][1], p[0][2], p[1][0], p[1][1], p[1][2]); // forward kinematics
-        pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", new_pos[0], new_pos[1], new_pos[2], new_pos[3], new_pos[4], new_pos[5]); // new positions in radians
-        */
-
-        // pc.printf("%2.3f, %.2f, %2.3f, %2.3f, %2.3f, %2.3f \n\r", t3.read(), range_m[2], range_m[3], tau_left[0][0], tau_left[1][0], tau_left[2][0]); 
-
-
-
-        // printing data takes about 4ms at baud of 460800
-        // pc.printf("%.2f, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
-        // pc.printf("%1.3f, %1.3f, %1.3f, %1.3f, %1.3f, %1.3f\n\r", l_diff, l_avg, r_diff, r_avg, link3_corrections[0], link3_corrections[1]);
-        
-        // pc.printf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n\r", range_status[0], range_status[1], range_status[2], range_status[3], range_status[4], range_status[5], range_status[6], range_status[7], range_status[8]);  
-        // pc.printf("%d, %d, %d, %d, %d, %d\n\r", dxl_pos[0], dxl_pos[1], dxl_pos[2], dxl_pos[3], dxl_pos[4], dxl_pos[5]);
-
-        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, ", left_finger.output_data[0], left_finger.output_data[1], left_finger.output_data[2], left_finger.output_data[3], left_finger.output_data[4]);
-        // pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", right_finger.output_data[0], right_finger.output_data[1], right_finger.output_data[2], right_finger.output_data[3], right_finger.output_data[4]);
-        // print desired joint positions and forward kinematics instead of force sensor values
-
-        // TODO: only print every five or ten loops?
-        // pc.printf("%d, %d\n\r\n\r", samp4, samp5);
 
         samp4 = t2.read_us();
         samp5 = t.read_us();
