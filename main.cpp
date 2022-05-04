@@ -13,7 +13,8 @@
 Serial pc(USBTX, USBRX, 921600); //460800);
 DigitalOut led(LED1);
 
-float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+//float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+float loop_time = 0.006f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // dynamixels
@@ -684,23 +685,27 @@ int main() {
         dxl_bus.SetMultGoalCurrents(dxl_IDs, num_IDs, des_cur);
 
     
-
+        samp5 = t.read_us();
         t2.reset();
-        
-        pc.printf("%.2f, %1.3f, %1.3f,    %1.4f, %1.4f,    %1.3f,    %1.4f, %1.4f,   %1.3f, %1.3f\n\r", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+
+        //pc.printf("%d \n\r", samp5);
+        //pc.printf("%.4f \n\r", t3.read());
+        //pc.printf("%.2f, %1.3f, %1.3f,    %1.4f, %1.4f,    %1.3f,    %1.4f, %1.4f,   %1.3f, %1.3f", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        //pc,printf("%d \n\r", dxl_bus.GetPosition(1));
         //pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
         //pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[2], range_m[3], p[0][0], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); //left side
-//        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]);
-//        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor  
+//        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                
+//        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor outer 
         //pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[8], range_m[7], p[1][2], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //
+        pc.printf("%2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,\n\r", t3.read(), range_m[2], range_m[3],   des_left[0][0],des_left[1][0],des_left[2][0],     tau_left[0][0], tau_left[1][0], tau_left[2][0],    range_m[5], range_m[6],    des_right[0][0],des_right[1][0],des_right[2][0],     tau_right[0][0], tau_right[1][0]); //Both sides
 
 
         samp4 = t2.read_us();
-        samp5 = t.read_us();
+
         wait_us(10);
 
         while (t.read()<loop_time) {;}
-        led = !led;
+        //led = !led;
         
     }
 }
