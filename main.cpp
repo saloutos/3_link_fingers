@@ -25,7 +25,7 @@ int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
 float pulse_to_rad = (2.0f*3.14159f)/4096.0f; // = 0.001534
 float conv_pos[6];
-float default_pos[] = {1.0f, -1.8f, 1.3f, -1.0f, 1.8f, -1.3f}; // nominal joint positions
+float default_pos[] = {1.2f, -1.8f, 1.3f, -1.2f, 1.8f, -1.3f}; // nominal joint positions
 // float default_pos[] = {0.9f, -0.9f, -0.7f, -0.9f, 0.9f, 0.7f}; // nominal joint positions
 float link3_angles_des[] = {0.5f, -0.5f}; // [left,right] in world reference frame
 float new_pos[6];
@@ -697,7 +697,7 @@ int main() {
 //        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                
 //        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor outer 
         //pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[8], range_m[7], p[1][2], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //
-        pc.printf("%2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,\n\r", t3.read(), range_m[2], range_m[3],   des_left[0][0],des_left[1][0],des_left[2][0],     tau_left[0][0], tau_left[1][0], tau_left[2][0],    range_m[5], range_m[6],    des_right[0][0],des_right[1][0],des_right[2][0],     tau_right[0][0], tau_right[1][0]); //Both sides
+        pc.printf("%2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,    %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,  \n\r", t3.read(), range_m[2], range_m[3],   des_left[0][0],des_left[1][0],des_left[2][0],       range_m[5], range_m[6],    des_right[0][0],des_right[1][0],des_right[2][0]); //Both sides
 
 
         samp4 = t2.read_us();
