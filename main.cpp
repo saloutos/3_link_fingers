@@ -17,6 +17,9 @@ DigitalOut led(LED1);
 float loop_time = 0.006f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
+int state = 2; //1= gliding mode, 2=pinch mode (still experimental 5/4)
+
+
 // dynamixels
 XL330_bus dxl_bus(1000000, D1, D0, D2); // baud, tx, rx, rts
 uint8_t dxl_IDs[] =  {1,2,3,4,5,6}; //in order: Left MCP, Left PIP, Left DIP, Right MCP, Right PIP, Right DIP
@@ -24,6 +27,8 @@ float dxl_offsets[] = {3.916f, 3.898f, 3.901f, 5.513f, 2.304f, 2.404f};
 int32_t dxl_pos[6];
 uint8_t num_IDs = 6;
 float pulse_to_rad = (2.0f*3.14159f)/4096.0f; // = 0.001534
+float deg_to_rad = 0.0174533f;
+float rad_to_deg = 1/deg_to_rad;
 float conv_pos[6];
 float default_pos[] = {1.2f, -1.8f, 1.3f, -1.2f, 1.8f, -1.3f}; // nominal joint positions
 // float default_pos[] = {0.9f, -0.9f, -0.7f, -0.9f, 0.9f, 0.7f}; // nominal joint positions
@@ -84,6 +89,7 @@ DigitalOut xs7(PD_15);
 DigitalOut xs8(PF_14);
 DigitalOut xs9(PE_9);
 
+//TOF sensor
 int range[9];
 float range_m[9]; // range in m
 float range_m_raw[9]; // range in m, non-filtered
@@ -93,6 +99,7 @@ int range_offsets[] = {4, 8, 9, 10, 5, 0, 0, 10, 3}; // offsets in mm to be adde
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 30;
 float filt_coef = 0.70f;
+
 
 // timer stuff
 Timer t;
@@ -116,12 +123,12 @@ float p2[2][3]; //new variable of only the first 2 link
 float v[2][3];
 float etip_left[3][2]; // out, fw, in
 float etip_right[3][2]; // out, fw, in
-float J_left[2][2]; // 
-float JT_left[2][2]; // 
+float J2_left[2][2]; // 
+float J2T_left[2][2]; // 
 float tau_left[3][1];// 
 float des_left[3][1];// 
-float J_right[2][2]; // 
-float JT_right[2][2]; // 
+float J2_right[2][2]; // 
+float J2T_right[2][2]; // 
 float tau_right[3][1];// 
 float des_right[3][1];// 
 float pstar[2][2]; // desired change in end-effector position
@@ -144,6 +151,11 @@ float l_diff, l_avg, r_diff, r_avg; // values for internal sensors
 float Kd; //joint damping
 float Kp1; //proportaional gain for x y
 float Kp2; //proportaional gain for angle
+
+//Sensor Stuff
+float left_fx, left_fy, left_fz, left_th, left_phi;
+float right_fx, right_fy, right_fz, right_th, right_phi;
+float force_offset[6];
 
 // Helper functions for i2c
 void set_mux1(uint8_t channel){
@@ -174,12 +186,16 @@ void mult33x31(float Rout[3][1], float R1[3][3], float R2[3][1]){
 // main loop
 int main() {
     
-    // start up
+
 
     // wait(3.0);
     wait_us(50000);
 
-    pc.printf("Initializing.\n\r");
+    if (state==1){
+        pc.printf("Initializing GLIDING mode\n\r");
+    } else if (state==2){
+        pc.printf("Initializing PINCH mode\n\r");
+    }
     
     i2c1.frequency(400000); // set bus freq
     i2c2.frequency(400000); 
@@ -192,6 +208,53 @@ int main() {
     right_finger.Initialize();
     right_finger.Calibrate();
     wait_us(10000);
+
+    pc.printf("Calculating Left sensor offsets.\n\r");
+    float left_temp_offsets[8];
+    for (int i=0; i<500; i++){
+        left_finger.Sample();
+        for (int j=0; j<8; j++){
+            left_temp_offsets[j] += ((float)left_finger.raw_data[j])/500.0f;
+        }
+        wait(0.005); // wait for 1/200 s
+    }
+    pc.printf("Saved offsets: ");
+    for (int i=0; i<8; i++){
+        left_finger.offsets[i] = (int)left_temp_offsets[i];
+        pc.printf("%d, ", left_finger.offsets[i]);
+    }
+    pc.printf("\n\r");
+
+    pc.printf("Calculating RIGHT sensor offsets.\n\r");
+    float right_temp_offsets[8];
+    for (int i=0; i<500; i++){
+        right_finger.Sample();
+        for (int j=0; j<8; j++){
+            right_temp_offsets[j] += ((float)right_finger.raw_data[j])/500.0f;
+        }
+        wait(0.005); // wait for 1/200 s
+    }
+    pc.printf("Saved offsets: ");
+    for (int i=0; i<8; i++){
+        right_finger.offsets[i] = (int)right_temp_offsets[i];
+        pc.printf("%d, ", right_finger.offsets[i]);
+    }
+    pc.printf("\n\r");
+
+    //force offset zeroing from the output side of the network
+    left_finger.Sample();
+    left_finger.Evaluate();
+    wait_us(10);
+    right_finger.Sample();
+    right_finger.Evaluate();
+    wait_us(10);
+    
+    force_offset[0]= left_finger.output_data[0];
+    force_offset[1] = left_finger.output_data[1];
+    force_offset[2] = left_finger.output_data[2];
+    force_offset[3]= right_finger.output_data[0];
+    force_offset[4] = right_finger.output_data[1];
+    force_offset[5] = right_finger.output_data[2];
 
     // perform any setup for the sensor here
     pc.printf("Sensor 1...\n\r");
@@ -364,7 +427,7 @@ int main() {
         wait_us(100);
     } 
 
-    pc.printf("Starting...\n\r");
+    pc.printf("Starting... \n\r");
 
     t.reset();
     t.start();
@@ -538,10 +601,10 @@ int main() {
         etip_left[2][1] = -cos(conv_pos[0]+conv_pos[1]+conv_pos[2]);
 
         //Jacobian for Left P2 not p
-        J_left[0][0] = -l1*sin(conv_pos[0]) -l2*sin(conv_pos[0]+conv_pos[1]);// dq1/dx with q1=conv_pos[0] or base
-        J_left[0][1] = -l2*sin(conv_pos[0]+conv_pos[1]);// dq2/dx with q2=conv_pos[1]
-        J_left[1][0] =  l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]); // dq1/dy
-        J_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]); // dq2/dy
+        J2_left[0][0] = -l1*sin(conv_pos[0]) -l2*sin(conv_pos[0]+conv_pos[1]);// dq1/dx with q1=conv_pos[0] or base
+        J2_left[0][1] = -l2*sin(conv_pos[0]+conv_pos[1]);// dq2/dx with q2=conv_pos[1]
+        J2_left[1][0] =  l1*cos(conv_pos[0]) + l2*cos(conv_pos[0]+conv_pos[1]); // dq1/dy
+        J2_left[1][1] =  l2*cos(conv_pos[0]+conv_pos[1]); // dq2/dy
 
         // evaluate forward kinematics
         p2[1][0] = l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]); //x
@@ -559,38 +622,19 @@ int main() {
         etip_right[2][1] = cos(conv_pos[3]+conv_pos[4]+conv_pos[5]);
 
         //Jacobian for right REWRITE
-        J_right[0][0] = -l1*sin(conv_pos[3]) -l2*sin(conv_pos[3]+conv_pos[4]);// dq1/dx with q1=conv_pos[0] or base
-        J_right[0][1] = -l2*sin(conv_pos[3]+conv_pos[4]);// dq2/dx with q2=conv_pos[1]
-        J_right[1][0] =  l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]); // dq1/dy
-        J_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) ; // dq2/dy
+        J2_right[0][0] = -l1*sin(conv_pos[3]) -l2*sin(conv_pos[3]+conv_pos[4]);// dq1/dx with q1=conv_pos[0] or base
+        J2_right[0][1] = -l2*sin(conv_pos[3]+conv_pos[4]);// dq2/dx with q2=conv_pos[1]
+        J2_right[1][0] =  l1*cos(conv_pos[3]) + l2*cos(conv_pos[3]+conv_pos[4]); // dq1/dy
+        J2_right[1][1] =  l2*cos(conv_pos[3]+conv_pos[4]) ; // dq2/dy
 
         //Jacobian transpose for both left and right   
         for (int i=0; i<2; i++){
             for (int j=0; j<2; j++){
-                JT_right[i][j]=J_right[j][i];
-                JT_left[i][j]=J_left[j][i];
+                J2T_right[i][j]=J2_right[j][i];
+                J2T_left[i][j]=J2_left[j][i];
             }
         }
 
-        // check sensor values against proximity threshold
-        // if threshold is violated, calculate necessary inverse kinematics solution
-        pstar[0][0] = p[0][0]; // reset pstar and ik flags
-        pstar[0][1] = p[0][1];
-        pstar[1][0] = p[1][0];
-        pstar[1][1] = p[1][1];
-        left_ik = 0;
-        right_ik = 0;
-
-        // Calculate "gliding" distance
-        l_diff = 0.0f;
-        l_avg = 0.0f;
-        r_diff = 0.0f;
-        r_avg = 0.0f;
-
-        Kp1= 10000*3; //with 60000 0 0 springy
-        Kp2= 50*3;
-        Kd = 0;//0.04;
-        
         tau_left[0][0]=0.0f;
         tau_left[1][0]=0.0f;
         tau_left[2][0]=0.0f;
@@ -598,81 +642,130 @@ int main() {
         tau_right[1][0]=0.0f;
         tau_right[2][0]=0.0f;
 
-        if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
-            l_diff = fmaxf2( fminf2( range_m[3]-range_m[2], corr_thresh), -corr_thresh);
-            link3_corrections[0] = atan2(l_diff,linbw);
+        //Which mode: 1== gliding
+        if (state==1){
+            // check sensor values against proximity threshold
+            // if threshold is violated, calculate necessary inverse kinematics solution
+            pstar[0][0] = p[0][0]; // reset pstar and ik flags
+            pstar[0][1] = p[0][1];
+            pstar[1][0] = p[1][0];
+            pstar[1][1] = p[1][1];
+            left_ik = 0;
+            right_ik = 0;
 
-            if (((link3_corrections[0] + conv_pos[2]) <ang_max) && ((link3_corrections[0] + conv_pos[2]) >ang_min)){ //checking if its past limit
-                link3_corrections[0] = fmaxf2( fminf2( link3_corrections[0], ang_max), ang_min) + p[0][2]; //the angle of the normal in world frame by adding p[0][2]= angle of 3rd link
-                left_ik = 1;
-                l_avg = 0.5*(range_m_raw[2]+range_m_raw[3]);
-                pstar[0][0] += l_avg*etip_left[2][0]; // x: get from p to surface
-                pstar[0][0] += -glide_dist*sin(link3_corrections[0]); // x: from surface to p of desired 
-                pstar[0][0] += -l3*cos(link3_corrections[0]); // x: from p of desired to p2 desired
-            
-                pstar[0][1] += l_avg*etip_left[2][1]; // y: get from p to surface
-                pstar[0][1] += -glide_dist*-cos(link3_corrections[0]);// y: from surface to p of desired 
-                pstar[0][1] += -l3*sin(link3_corrections[0]);// y: from p of desired to p2 desired
+            // Calculate "gliding" distance
+            l_diff = 0.0f;
+            l_avg = 0.0f;
+            r_diff = 0.0f;
+            r_avg = 0.0f;
+
+            Kp1= 10000*3; //with 60000 0 0 springy
+            Kp2= 50*3;
+            Kd = 0;//0.04;
+            if ((range_m[2]<glide_thresh)&&(range_m[3]<glide_thresh)){ // if both sensors are activated for gliding 
+                l_diff = fmaxf2( fminf2( range_m[3]-range_m[2], corr_thresh), -corr_thresh);
+                link3_corrections[0] = atan2(l_diff,linbw);
+
+                if (((link3_corrections[0] + conv_pos[2]) <ang_max) && ((link3_corrections[0] + conv_pos[2]) >ang_min)){ //checking if its past limit
+                    link3_corrections[0] = fmaxf2( fminf2( link3_corrections[0], ang_max), ang_min) + p[0][2]; //the angle of the normal in world frame by adding p[0][2]= angle of 3rd link
+                    left_ik = 1;
+                    l_avg = 0.5*(range_m_raw[2]+range_m_raw[3]);
+                    pstar[0][0] += l_avg*etip_left[2][0]; // x: get from p to surface
+                    pstar[0][0] += -glide_dist*sin(link3_corrections[0]); // x: from surface to p of desired 
+                    pstar[0][0] += -l3*cos(link3_corrections[0]); // x: from p of desired to p2 desired
                 
-                des_left[0][0]=Kp1*(pstar[0][0]-p2[0][0]); //x position of left x, gain* (desired- actual)
-                des_left[1][0]=Kp1*(pstar[0][1]-p2[0][1]); //y position of left y, gain* (desired - actual)
-                tau_left[0][0] = JT_left[0][0]*des_left[0][0] + JT_left[0][1]*des_left[1][0] ;
-                tau_left[1][0] = JT_left[1][0]*des_left[0][0] + JT_left[1][1]*des_left[1][0] ;
-                tau_left[2][0] =  Kp2 * (link3_corrections[0]-p[0][2]);
+                    pstar[0][1] += l_avg*etip_left[2][1]; // y: get from p to surface
+                    pstar[0][1] += -glide_dist*-cos(link3_corrections[0]);// y: from surface to p of desired 
+                    pstar[0][1] += -l3*sin(link3_corrections[0]);// y: from p of desired to p2 desired
+                    
+                    des_left[0][0]=Kp1*(pstar[0][0]-p2[0][0]); //x position of left x, gain* (desired- actual)
+                    des_left[1][0]=Kp1*(pstar[0][1]-p2[0][1]); //y position of left y, gain* (desired - actual)
+                    tau_left[0][0] = J2T_left[0][0]*des_left[0][0] + J2T_left[0][1]*des_left[1][0] ;
+                    tau_left[1][0] = J2T_left[1][0]*des_left[0][0] + J2T_left[1][1]*des_left[1][0] ;
+                    tau_left[2][0] =  Kp2 * (link3_corrections[0]-p[0][2]);
+                    //pc.printf("left ik \n\r");
+                } else{
+                    pc.printf("Left Joint limits \n\r");
+                }
+
+            }
+            if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ 
+                l_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
+                link3_corrections[1] = atan2(l_diff,linbw);
+
+                if (((link3_corrections[1] + conv_pos[5]) <ang_max) && ((link3_corrections[1] + conv_pos[5]) >ang_min)){ 
+                    link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min) + p[1][2]; 
+                    right_ik = 1;
+                    r_avg = 0.5*(range_m_raw[5]+range_m_raw[6]);
+                    pstar[1][0] += r_avg*etip_right[2][0];
+                    pstar[1][0] += -glide_dist*-sin(link3_corrections[1]);
+                    pstar[1][0] += -l3*cos(link3_corrections[1]); 
+                
+                    pstar[1][1] += r_avg*etip_right[2][1]; 
+                    pstar[1][1] += -glide_dist*cos(link3_corrections[1]);
+                    pstar[1][1] += -l3*sin(link3_corrections[1]);
+
+                    des_right[0][0]= 1* Kp1*(pstar[1][0]-p2[1][0]); //x position of left x, gain* (desired- actual)
+                    des_right[1][0]= 1* Kp1*(pstar[1][1]-p2[1][1]); //y position of left y, gain* (desired - actual)
+                    tau_right[0][0] = J2T_right[0][0]*des_right[0][0] + J2T_right[0][1]*des_right[1][0] ;
+                    tau_right[1][0] = J2T_right[1][0]*des_right[0][0] + J2T_right[1][1]*des_right[1][0] ;
+                    tau_right[2][0] =  1.5* Kp2 * (link3_corrections[1]-p[1][2]);
                 //pc.printf("left ik \n\r");
-            } else{
-                pc.printf("Left Joint limits \n\r");
+                } else{
+                    pc.printf("Right joint limits \n\r");
+                }
             }
+            if ((range_m[0]<avoid_thresh_o)||(range_m[1]<avoid_thresh_f)){ // LEFT SENSOR: if either back sensor less than avoidance
 
-        }
+                des_left[0][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -cos(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* sin(p[0][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
+                des_left[1][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -sin(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* -cos(p[0][2]));//y position 
+                tau_left[0][0] += J2T_left[0][0]*des_left[0][0] + J2T_left[0][1]*des_left[1][0] ;
+                tau_left[1][0] += J2T_left[1][0]*des_left[0][0] + J2T_left[1][1]*des_left[1][0] ;
 
-        
+            }
+            if ((range_m[8]<avoid_thresh_o)||(range_m[7]<avoid_thresh_f)){ // RIGHT SENSORi: f either back sensor less than avoidance
 
-        if ((range_m[5]<glide_thresh)&&(range_m[6]<glide_thresh)){ 
-            l_diff = fmaxf2( fminf2( range_m[6]-range_m[5], corr_thresh), -corr_thresh);
-            link3_corrections[1] = atan2(l_diff,linbw);
+                des_right[0][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -cos(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* -sin(p[1][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
+                des_right[1][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -sin(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* cos(p[1][2]));//y position 
+                tau_right[0][0] += J2T_right[0][0]*des_right[0][0] + J2T_right[0][1]*des_right[1][0] ;
+                tau_right[1][0] += J2T_right[1][0]*des_right[0][0] + J2T_right[1][1]*des_right[1][0] ;
 
-            if (((link3_corrections[1] + conv_pos[5]) <ang_max) && ((link3_corrections[1] + conv_pos[5]) >ang_min)){ 
-                link3_corrections[1] = fmaxf2( fminf2( link3_corrections[1], ang_max), ang_min) + p[1][2]; 
-                right_ik = 1;
-                r_avg = 0.5*(range_m_raw[5]+range_m_raw[6]);
-                pstar[1][0] += r_avg*etip_right[2][0];
-                pstar[1][0] += -glide_dist*-sin(link3_corrections[1]);
-                pstar[1][0] += -l3*cos(link3_corrections[1]); 
+            }
+        //pc.printf("%d \n\r", samp5);
+        //pc.printf("%.4f \n\r", t3.read());
+        //pc.printf("%.2f, %1.3f, %1.3f,    %1.4f, %1.4f,    %1.3f,    %1.4f, %1.4f,   %1.3f, %1.3f", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
+        //pc,printf("%d \n\r", dxl_bus.GetPosition(1));
+        //pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
+        //pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[2], range_m[3], p[0][0], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); //left side
+//        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                
+//        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor outer 
+        //pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[8], range_m[7], p[1][2], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //
+            pc.printf("%2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,    %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,  \n\r", t3.read(), range_m[2], range_m[3],   des_left[0][0],des_left[1][0],des_left[2][0],       range_m[5], range_m[6],    des_right[0][0],des_right[1][0],des_right[2][0]); //Both sides
+
+        // Pinch mode
+        }else if (state==2){
             
-                pstar[1][1] += r_avg*etip_right[2][1]; 
-                pstar[1][1] += -glide_dist*cos(link3_corrections[1]);
-                pstar[1][1] += -l3*sin(link3_corrections[1]);
+            left_fx = left_finger.output_data[0]-force_offset[0];
+            left_fy = left_finger.output_data[1]-force_offset[1];
+            left_fz = left_finger.output_data[2]-force_offset[2];
+            left_th = deg_to_rad*left_finger.output_data[3];
+            left_phi = deg_to_rad*left_finger.output_data[4];
 
-                des_right[0][0]= 1* Kp1*(pstar[1][0]-p2[1][0]); //x position of left x, gain* (desired- actual)
-                des_right[1][0]= 1* Kp1*(pstar[1][1]-p2[1][1]); //y position of left y, gain* (desired - actual)
-                tau_right[0][0] = JT_right[0][0]*des_right[0][0] + JT_right[0][1]*des_right[1][0] ;
-                tau_right[1][0] = JT_right[1][0]*des_right[0][0] + JT_right[1][1]*des_right[1][0] ;
-                tau_right[2][0] =  1.5* Kp2 * (link3_corrections[1]-p[1][2]);
-            //pc.printf("left ik \n\r");
-            } else{
-                pc.printf("Right joint limits \n\r");
+            right_fx = right_finger.output_data[0]-force_offset[3];
+            right_fy = right_finger.output_data[1]-force_offset[4];
+            right_fz = right_finger.output_data[2]-force_offset[5];
+
+            right_th = deg_to_rad*right_finger.output_data[3];
+            right_phi = deg_to_rad*right_finger.output_data[4];
+
+            pc.printf("%2.1f, %2.1f, %2.1f,      %2.1f, %2.1f, %2.1f \n\r", left_fz, rad_to_deg*left_th, rad_to_deg*left_phi, right_fz, rad_to_deg*right_th, rad_to_deg*right_phi);
+            if (rad_to_deg*left_th> 15.0f || rad_to_deg*left_th< -15.0f){
+                pc.printf("Left Theta Outside 15deg\n\r");
             }
-
+            if (rad_to_deg*right_th> 15.0f || rad_to_deg*right_th< -15.0f){
+                pc.printf("Right Theta Outside 15deg\n\r");
+            }
         }
-
-        if ((range_m[0]<avoid_thresh_o)||(range_m[1]<avoid_thresh_f)){ // LEFT SENSOR: if either back sensor less than avoidance
-
-            des_left[0][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -cos(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* sin(p[0][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
-            des_left[1][0] = Kp1*2*(fmaxf2(avoid_thresh_f-range_m[1], 0.0f)* -sin(p[0][2])) + Kp1*1*(fmaxf2(avoid_thresh_o-range_m[0], 0.0f)* -cos(p[0][2]));//y position 
-            tau_left[0][0] += JT_left[0][0]*des_left[0][0] + JT_left[0][1]*des_left[1][0] ;
-            tau_left[1][0] += JT_left[1][0]*des_left[0][0] + JT_left[1][1]*des_left[1][0] ;
-
-        }
-        if ((range_m[8]<avoid_thresh_o)||(range_m[7]<avoid_thresh_f)){ // RIGHT SENSORi: f either back sensor less than avoidance
-
-            des_right[0][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -cos(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* -sin(p[1][2]));//x position CHANGE THIS TO ANOTHER VARIABLE
-            des_right[1][0] = Kp1*1*(fmaxf2(avoid_thresh_f-range_m[7], 0.0f)* -sin(p[1][2])) + Kp1*(fmaxf2(avoid_thresh_o-range_m[8], 0.0f)* cos(p[1][2]));//y position 
-            tau_right[0][0] += JT_right[0][0]*des_right[0][0] + JT_right[0][1]*des_right[1][0] ;
-            tau_right[1][0] += JT_right[1][0]*des_right[0][0] + JT_right[1][1]*des_right[1][0] ;
-
-        }
-
 
         des_cur[0]=(int16_t)tau_left[0][0];
         des_cur[1]=(int16_t)tau_left[1][0];
@@ -687,18 +780,6 @@ int main() {
     
         samp5 = t.read_us();
         t2.reset();
-
-        //pc.printf("%d \n\r", samp5);
-        //pc.printf("%.4f \n\r", t3.read());
-        //pc.printf("%.2f, %1.3f, %1.3f,    %1.4f, %1.4f,    %1.3f,    %1.4f, %1.4f,   %1.3f, %1.3f", t3.read(), range_m[0], range_m[1], range_m[2], range_m[3], range_m[4], range_m[5], range_m[6], range_m[7], range_m[8]);
-        //pc,printf("%d \n\r", dxl_bus.GetPosition(1));
-        //pc.printf("%2.3f, %2.3f, %2.3f, %2.3f, %2.3f, %2.3f\n\r", conv_pos[0], conv_pos[1], conv_pos[2], conv_pos[3], conv_pos[4], conv_pos[5]);
-        //pc.printf("%2.3f, %.2f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[2], range_m[3], p[0][0], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); //left side
-//        pc.printf("%2.3f, %2.3f,%2.3f, %2.3f, %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[5], range_m[6], p[0][0], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //right side                
-//        pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[1], range_m[0], p[0][2], des_left[0][0],des_left[1][0],des_left[2][0], tau_left[0][0], tau_left[1][0], tau_left[2][0], des_cur[0], des_cur[1], des_cur[2]); // right sensor outer 
-        //pc.printf("%2.3f, %2.3f,%2.3f,  %2.3f,   %2.3f,%2.3f,%2.3f, %2.3f,%2.3f,%2.3f, %d, %d, %d \n\r", t3.read(), range_m[8], range_m[7], p[1][2], des_right[0][0],des_right[1][0],des_right[2][0], tau_right[0][0], tau_right[1][0], tau_right[2][0], des_cur[3], des_cur[4], des_cur[5]); //
-        pc.printf("%2.3f,   %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,    %2.3f, %2.3f,   %2.3f, %2.3f, %2.3f,  \n\r", t3.read(), range_m[2], range_m[3],   des_left[0][0],des_left[1][0],des_left[2][0],       range_m[5], range_m[6],    des_right[0][0],des_right[1][0],des_right[2][0]); //Both sides
-
 
         samp4 = t2.read_us();
 

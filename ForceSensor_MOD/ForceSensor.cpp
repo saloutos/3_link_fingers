@@ -231,7 +231,7 @@ void ForceSensor::Calibrate(){
 //        temp_offsets[i] = temp_offsets[i]/((float)samps); // get overall offset
 //        offsets[i] = (uint16_t)temp_offsets[i]; // convert to int
 //    }
-    
+
 } 
     
     
