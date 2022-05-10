@@ -41,7 +41,366 @@ float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is 
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // Set up CAN
-CAN can(PB_8, PB_9, 1000000);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AN can(PB_8, PB_9, 1000000);
 CANMessage rxMsg;
 CANMessage txMsg_t1, txMsg_t2, txMsg_f1, txMsg_f2; // ToF and force for each finger
 
@@ -51,7 +410,7 @@ SPI spi1(PB_15, PB_14, PB_13); // MOSI, MISO, SCK
 DigitalOut cs01(PC_9);
 DigitalOut cs11(PA_6);
 DigitalOut cs21(PA_7); 
-DigitalOut cs31(PB_6); 
+DigitalOut cs31(PC_6); 
 DigitalOut cs41(PA_9);
 DigitalOut cs51(PB_10); 
 DigitalOut cs61(PB_5);
@@ -63,9 +422,9 @@ ForceSensor left_finger(1, &sensor31); // class is modified to use new digital o
 SPI spi2(PC_12, PC_11, PC_10); // MOSI, MISO, SCK
 DigitalOut cs02(PC_8);
 DigitalOut cs12(PC_5);
-DigitalOut cs22(PA_12); 
-DigitalOut cs32(PA_11); 
-DigitalOut cs42(PB_12);
+DigitalOut cs22(PA_11); 
+DigitalOut cs32(PB_12); 
+DigitalOut cs42(PA_12);
 DigitalOut cs52(PB_2); 
 DigitalOut cs62(PB_1);
 DigitalOut cs72(PC_4);
@@ -73,7 +432,7 @@ extern NeuralNet sensor28;
 ForceSensor right_finger(2, &sensor28); // class is modified to use new digital outs and spi
 
 // ToF sensor i2c busses
-I2C i2c1(PC_7, PC_6); // SDA, SCL
+I2C i2c1(PB_7, PB_6); // SDA, SCL
 I2C i2c2(PB_4, PA_8); 
 
 // initialize ToF sensors
@@ -295,7 +654,7 @@ int main() {
         pc.printf("Sensor 1 init failed.\n\r");
     }
     wait_us(1000);
-    // pc.printf("Range mode: %d\n\r",tof1.readRangeMode());
+    pc.printf("Range mode: %d\n\r",tof1.readRangeMode());
     if(tof1.readRangeMode()==0){ // TODO: might be able to remove this check since we have the reset lines now
         tof1.startRangeContinuous(range_period);
     }
@@ -311,7 +670,7 @@ int main() {
         pc.printf("Sensor 2 init failed.\n\r");
     }
     wait_us(1000);
-    // pc.printf("Range mode: %d\n\r",tof2.readRangeMode());
+    pc.printf("Range mode: %d\n\r",tof2.readRangeMode());
     if(tof2.readRangeMode()==0){
         tof2.startRangeContinuous(range_period);
     }
@@ -329,6 +688,7 @@ int main() {
         pc.printf("Sensor 3 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof3.readRangeMode());
     if(tof3.readRangeMode()==0){
         tof3.startRangeContinuous(range_period);
     }
@@ -344,6 +704,7 @@ int main() {
         pc.printf("Sensor 4 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof4.readRangeMode());
     if(tof4.readRangeMode()==0){
         tof4.startRangeContinuous(range_period);
     }
@@ -361,6 +722,7 @@ int main() {
         pc.printf("Sensor 5 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof5.readRangeMode());
     if(tof5.readRangeMode()==0){
         tof5.startRangeContinuous(range_period);
     }
@@ -368,7 +730,7 @@ int main() {
 
 
     pc.printf("Sensor 6...\n\r");
-    set_mux1(2); // channel 5 on mux 1
+    set_mux1(3); // channel 3 on mux 1 (out of order oops)
     wait_us(1000);
     // xs6 = 0;
     wait_us(10000);
@@ -378,12 +740,13 @@ int main() {
         pc.printf("Sensor 6 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof6.readRangeMode());
     if(tof6.readRangeMode()==0){
         tof6.startRangeContinuous(range_period);
     }
     wait_us(10000);
     pc.printf("Sensor 7...\n\r");
-    set_mux1(3); // channel 2 on mux 1
+    set_mux1(2); // channel 2 on mux 1
     wait_us(1000);
     // xs7 = 0;
     wait_us(10000);
@@ -393,6 +756,7 @@ int main() {
         pc.printf("Sensor 7 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof7.readRangeMode());
     if(tof7.readRangeMode()==0){
         tof7.startRangeContinuous(range_period);
     }
@@ -400,7 +764,7 @@ int main() {
 
 
     pc.printf("Sensor 8...\n\r");
-    set_mux1(4); // channel 3 on mux 1
+    set_mux1(4); // channel 4 on mux 1
     wait_us(1000);
     // xs8 = 0;
     wait_us(10000);
@@ -410,12 +774,13 @@ int main() {
         pc.printf("Sensor 8 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof8.readRangeMode());
     if(tof8.readRangeMode()==0){
         tof8.startRangeContinuous(range_period);
     }
     wait_us(10000);
     pc.printf("Sensor 9...\n\r");
-    set_mux1(5); // channel 4 on mux 1
+    set_mux1(5); // channel 5 on mux 1
     wait_us(1000);
     // xs9 = 0;
     wait_us(10000);
@@ -425,11 +790,12 @@ int main() {
         pc.printf("Sensor 9 init failed.\n\r");
     }
     wait_us(1000);
+    pc.printf("Range mode: %d\n\r",tof9.readRangeMode());
     if(tof9.readRangeMode()==0){
         tof9.startRangeContinuous(range_period);
     }
     wait_us(10000);
-
+    
 
     // Set up CAN
     can.filter(CAN_ID , 0xFFF, CANStandard, 0);                                                         
@@ -509,11 +875,6 @@ int main() {
             // get data from TOF sensor
             t2.reset(); // reading all of the continuous range measurements takes about 2ms with current wait times
 
-            // reset raw measurements
-            for(int i=0; i<9; i++){
-                range[i] = 0;
-            }    
-
             // TODO: could remove range status reading to speed up?
             set_mux2(2);
             if (tof1.isRangeComplete()){
@@ -573,64 +934,63 @@ int main() {
 
             samp1 = t2.read_us();
 
-            // t2.reset();
-            // set_mux1(2);
-            // if (tof6.isRangeComplete()){
-            //     // if it is ready, get range status, mode, and result
-            //     // wait_us(10);
-            //     // range_status[5] = tof6.readRangeStatus();
-            //     // wait_us(10);
-            //     // range_mode[5] = tof6.readRangeMode();
-            //     wait_us(10);
-            //     range[5] = tof6.readRangeResult();
-            //     wait_us(10);
-            // }
-            // set_mux1(3);
-            // if (tof7.isRangeComplete()){
-            //     // if it is ready, get range status, mode, and result
-            //     // wait_us(10);
-            //     // range_status[6] = tof7.readRangeStatus();
-            //     // wait_us(10);
-            //     // range_mode[6] = tof7.readRangeMode();
-            //     wait_us(10);
-            //     range[6] = tof7.readRangeResult();
-            //     wait_us(10);
-            // }
-            // set_mux1(4);
-            // if (tof8.isRangeComplete()){
-            //     // if it is ready, get range status, mode, and result
-            //     // wait_us(10);
-            //     // range_status[7] = tof8.readRangeStatus();
-            //     // wait_us(10);
-            //     // range_mode[7] = tof8.readRangeMode();
-            //     wait_us(10);
-            //     range[7] = tof8.readRangeResult();
-            //     wait_us(10);
-            // }
-            // set_mux1(5);
-            // if (tof9.isRangeComplete()){
-            //     // if it is ready, get range status, mode, and result
-            //     // wait_us(10);
-            //     // range_status[8] = tof9.readRangeStatus();
-            //     // wait_us(10);
-            //     // range_mode[8] = tof9.readRangeMode();
-            //     wait_us(10);
-            //     range[8] = tof9.readRangeResult();
-            //     wait_us(10);
-            // }
-            // samp2 = t2.read_us();
+            t2.reset();
+            set_mux1(3);
+            if (tof6.isRangeComplete()){
+                // if it is ready, get range status, mode, and result
+                // wait_us(10);
+                // range_status[5] = tof6.readRangeStatus();
+                // wait_us(10);
+                // range_mode[5] = tof6.readRangeMode();
+                wait_us(10);
+                range[5] = tof6.readRangeResult();
+                wait_us(10);
+            }
+            set_mux1(2);
+            if (tof7.isRangeComplete()){
+                // if it is ready, get range status, mode, and result
+                // wait_us(10);
+                // range_status[6] = tof7.readRangeStatus();
+                // wait_us(10);
+                // range_mode[6] = tof7.readRangeMode();
+                wait_us(10);
+                range[6] = tof7.readRangeResult();
+                wait_us(10);
+            }
+            set_mux1(4);
+            if (tof8.isRangeComplete()){
+                // if it is ready, get range status, mode, and result
+                // wait_us(10);
+                // range_status[7] = tof8.readRangeStatus();
+                // wait_us(10);
+                // range_mode[7] = tof8.readRangeMode();
+                wait_us(10);
+                range[7] = tof8.readRangeResult();
+                wait_us(10);
+            }
+            set_mux1(5);
+            if (tof9.isRangeComplete()){
+                // if it is ready, get range status, mode, and result
+                // wait_us(10);
+                // range_status[8] = tof9.readRangeStatus();
+                // wait_us(10);
+                // range_mode[8] = tof9.readRangeMode();
+                wait_us(10);
+                range[8] = tof9.readRangeResult();
+                wait_us(10);
+            }
+            samp2 = t2.read_us();
 
             // convert range measurements to meters and do some filtering
             for(int i=0; i<9; i++){
                 if (range_status[i]==0){ // good measurement
-                    range[i] = range[i] + range_offsets[i];
                     if (range_m[i]==0.0f){ //==0.2f
-                        range_m[i] = ((float)(range[i]))/1000.0f;
+                        range_m[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
 
                     } else {
-                        range_m[i] = filt_coef*(((float)(range[i]))/1000.0f) + (1.0f-filt_coef)*range_m[i];
+                        range_m[i] = filt_coef*(((float)(range[i]+ range_offsets[i]))/1000.0f) + (1.0f-filt_coef)*range_m[i];
                     }
-                    range_m_raw[i] = ((float)(range[i]))/1000.0f;
+                    range_m_raw[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
                 } else {
                     range[i] = 255;
                     range_m[i] = 0.2f;
@@ -675,7 +1035,7 @@ int main() {
             }
             if (state==PRINT_TOF_MODE){
                 // printing raw data from ToF sensors
-                pc.printf("%.4f,%d,%d,%d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), samp5, samp1, samp2, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+                pc.printf("%3.4f,%d,%d,%d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), samp5, samp1, samp2, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
             }
 
             samp5 = t.read_us();
