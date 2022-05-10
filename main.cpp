@@ -37,370 +37,11 @@ DigitalOut led(LED1);
 volatile bool           serial_flag = false;
 volatile char           serial_input;
 
-float loop_time = 0.01f; // 200hz is probably maximum sample rate since that is pressure sensor rate too
+// 200hz is probably maximum sample rate since that is pressure sensor rate too
 // full loop takes about 10ms, so 100Hz is maximum achievable rate with everything on one board
 
 // Set up CAN
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-AN can(PB_8, PB_9, 1000000);
+CAN can(PB_8, PB_9, 1000000);
 CANMessage rxMsg;
 CANMessage txMsg_t1, txMsg_t2, txMsg_f1, txMsg_f2; // ToF and force for each finger
 
@@ -576,25 +217,6 @@ void pack_tof_reply(CANMessage * msg, uint8_t finger){
 
      }
 
-
-// CAN RX interrupt
-void onMsgReceived() {
- 
-    can.read(rxMsg);  
-    if(rxMsg.id == CAN_ID){
-        
-        // Enable message
-        if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
-            state = CAN_MODE;
-            pc.printf("Entering CAN mode.\n\r");
-            }
-        // Disable message
-        else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
-            state = REST_MODE;
-            pc.printf("Entering rest mode.\n\r");
-            }
-        }
-}
 
 void enter_menu_state(void){
     
@@ -805,10 +427,9 @@ int main() {
     txMsg_f2.len = 8;
     txMsg_t1.id = CAN_TOF_1;
     txMsg_t2.id = CAN_TOF_2;
-    txMsg_t1.len = 6;
-    txMsg_t2.len = 6;
+    txMsg_t1.len = 8;
+    txMsg_t2.len = 8;
     rxMsg.len = 8;
-    can.attach(&onMsgReceived);  
 
     pc.attach(&serial_interrupt);        // attach serial interrupt
 
@@ -857,6 +478,23 @@ int main() {
             serial_flag = false;
         }
 
+        if(can.read(rxMsg)){
+            
+            if(rxMsg.id == CAN_ID){
+                    
+                // Enable message
+                if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+                    state = CAN_MODE;
+                    pc.printf("Entering CAN mode.\n\r");
+                    }
+                // Disable message
+                else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+                    state = REST_MODE;
+                    pc.printf("Entering rest mode.\n\r");
+                    }
+            }
+
+        }
 
         if(send_data_flag==1){
 
