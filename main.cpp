@@ -498,6 +498,7 @@ int main() {
 
         if(send_data_flag==1){
 
+            send_data_flag = 0; // reset flag
             t.reset();
             t2.reset();                    
             
