@@ -87,15 +87,15 @@ VL6180X tof7; // right finger inner distal
 VL6180X tof8; // right finger forward
 VL6180X tof9; // right finger outer
 
-// DigitalOut xs1(PF_5); // reset for sensor 1
-// DigitalOut xs2(PF_4);
-// DigitalOut xs3(PE_8);
-// DigitalOut xs4(PF_10);
-// DigitalOut xs5(PE_7);
-// DigitalOut xs6(PD_14);
-// DigitalOut xs7(PD_15);
-// DigitalOut xs8(PF_14);
-// DigitalOut xs9(PE_9);
+DigitalOut xs1(PA_13); // reset for sensor 1
+DigitalOut xs2(PA_14);
+DigitalOut xs3(PA_15);
+DigitalOut xs4(PC_2);
+DigitalOut xs5(PC_13);
+DigitalOut xs6(PC_3);
+DigitalOut xs7(PB_0);
+DigitalOut xs8(PC_1);
+DigitalOut xs9(PC_0);
 
 int range[9];
 float range_m[9]; // range in m
@@ -268,9 +268,9 @@ int main() {
     pc.printf("Sensor 1...\n\r");
     set_mux2(2); // channel 2 on mux 2 
     wait_us(1000);
-    // xs1 = 0;
+    xs1 = 0;
     wait_us(10000);
-    // xs1 = 1;
+    xs1 = 1;
     wait_us(10000);
     if(!tof1.begin(&i2c2)){
         pc.printf("Sensor 1 init failed.\n\r");
@@ -284,9 +284,9 @@ int main() {
     pc.printf("Sensor 2...\n\r");
     set_mux2(3); // channel 3 on mux 2
     wait_us(1000);
-    // xs2 = 0;
+    xs2 = 0;
     wait_us(10000);
-    // xs2 = 1;
+    xs2 = 1;
     wait_us(10000);
     if(!tof2.begin(&i2c2)){
         pc.printf("Sensor 2 init failed.\n\r");
@@ -302,9 +302,9 @@ int main() {
     pc.printf("Sensor 3...\n\r");
     set_mux2(4); // channel 4 on mux 2
     wait_us(1000);
-    // xs3 = 0;
+    xs3 = 0;
     wait_us(10000);
-    // xs3 = 1;
+    xs3 = 1;
     wait_us(10000);
     if(!tof3.begin(&i2c2)){
         pc.printf("Sensor 3 init failed.\n\r");
@@ -318,9 +318,9 @@ int main() {
     pc.printf("Sensor 4...\n\r");
     set_mux2(5); // channel 5 on mux 2 
     wait_us(1000);
-    // xs4 = 0;
+    xs4 = 0;
     wait_us(10000);
-    // xs4 = 1;
+    xs4 = 1;
     wait_us(10000);
     if(!tof4.begin(&i2c2)){
         pc.printf("Sensor 4 init failed.\n\r");
@@ -336,9 +336,9 @@ int main() {
     pc.printf("Sensor 5...\n\r");
     set_mux2(6); // channel 6 on mux 2
     wait_us(1000);
-    // xs5 = 0;
+    xs5 = 0;
     wait_us(10000);
-    // xs5 = 1;
+    xs5 = 1;
     wait_us(10000);
     if(!tof5.begin(&i2c2)){
         pc.printf("Sensor 5 init failed.\n\r");
@@ -354,9 +354,9 @@ int main() {
     pc.printf("Sensor 6...\n\r");
     set_mux1(3); // channel 3 on mux 1 (out of order oops)
     wait_us(1000);
-    // xs6 = 0;
+    xs6 = 0;
     wait_us(10000);
-    // xs6 = 1;
+    xs6 = 1;
     wait_us(10000);
     if(!tof6.begin(&i2c1)){
         pc.printf("Sensor 6 init failed.\n\r");
@@ -370,9 +370,9 @@ int main() {
     pc.printf("Sensor 7...\n\r");
     set_mux1(2); // channel 2 on mux 1
     wait_us(1000);
-    // xs7 = 0;
+    xs7 = 0;
     wait_us(10000);
-    // xs7 = 1;
+    xs7 = 1;
     wait_us(10000);
     if(!tof7.begin(&i2c1)){
         pc.printf("Sensor 7 init failed.\n\r");
@@ -388,9 +388,9 @@ int main() {
     pc.printf("Sensor 8...\n\r");
     set_mux1(4); // channel 4 on mux 1
     wait_us(1000);
-    // xs8 = 0;
+    xs8 = 0;
     wait_us(10000);
-    // xs8 = 1;
+    xs8 = 1;
     wait_us(10000);
     if(!tof8.begin(&i2c1)){
         pc.printf("Sensor 8 init failed.\n\r");
@@ -404,9 +404,9 @@ int main() {
     pc.printf("Sensor 9...\n\r");
     set_mux1(5); // channel 5 on mux 1
     wait_us(1000);
-    // xs9 = 0;
+    xs9 = 0;
     wait_us(10000);
-    // xs9 = 1;
+    xs9 = 1;
     wait_us(10000);
     if(!tof9.begin(&i2c1)){
         pc.printf("Sensor 9 init failed.\n\r");
@@ -434,7 +434,7 @@ int main() {
     pc.attach(&serial_interrupt);        // attach serial interrupt
 
     // attach main interrupt here
-    send_data.attach_us(&send_new_data,5000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
+    send_data.attach_us(&send_new_data,10000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
 
     t.reset();
     t.start();
@@ -673,7 +673,7 @@ int main() {
             }
             if (state==PRINT_TOF_MODE){
                 // printing raw data from ToF sensors
-                pc.printf("%3.4f,%d,%d,%d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), samp5, samp1, samp2, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+                pc.printf("%3.4f,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
             }
 
             samp5 = t.read_us();
