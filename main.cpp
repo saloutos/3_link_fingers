@@ -16,10 +16,10 @@
 #define CAN_MODE            4
 
 #define CAN_ID              3
-#define CAN_FORCE_1         9
-#define CAN_FORCE_2         10
-#define CAN_TOF_1           11
-#define CAN_TOF_2           12
+#define CAN_FORCE_1         10
+#define CAN_FORCE_2         11
+#define CAN_TOF_1           12
+#define CAN_TOF_2           13
 
 // new limits for force sensors, need to test these!
 #define FT_MIN -20.0f
@@ -199,40 +199,38 @@ void pack_force_reply(CANMessage * msg, ForceSensor * fs){
 
 void pack_tof_reply(CANMessage * msg, uint8_t finger){
 
-     int id_off = 0;
-     if (finger==1){
-         id_off = 6;
-     } 
-     /// pack ints into the can buffer ///
-     msg->data[0] = finger;                                       
-     msg->data[1] = range[0+id_off];
-     msg->data[2] = range[1+id_off];
-     msg->data[3] = range[2+id_off];
-     msg->data[4] = range[3+id_off];
-     if (finger==0){
-         msg->data[5] = range[4];
-     } else {
-         msg->data[5] = 0;
-     }
+    /// pack ints into the can buffer ///   
+    if (finger==0){
+    msg->data[0] = range[0];
+    msg->data[1] = range[1];
+    msg->data[2] = range[2];
+    msg->data[3] = range[3];
+    msg->data[4] = range[4];
+    } else if (finger==1){
+    msg->data[0] = range[5];
+    msg->data[1] = range[6];
+    msg->data[2] = range[7];
+    msg->data[3] = range[8]; 
+    }
 
-     }
+    }
 
 
 void enter_menu_state(void){
     
     // TODO: make more useful menu
-    printf("\n\r\n\r\n\r");
-    printf(" Commands:\n\r");
+    pc.printf("\n\r\n\r\n\r");
+    pc.printf(" Commands:\n\r");
     wait_us(10);
-    printf(" e - Enter CAN Mode\n\r");
+    pc.printf(" e - Enter CAN Mode\n\r");
     wait_us(10);
-    printf(" n - Print Force Outputs\n\r");
+    pc.printf(" n - Print Force Outputs\n\r");
     wait_us(10);
-    printf(" r - Print Raw Sensor Values\n\r");
+    pc.printf(" r - Print Raw Sensor Values\n\r");
     wait_us(10);
-    printf(" t - Pring Tof Values\n\r");
+    pc.printf(" t - Pring Tof Values\n\r");
     wait_us(10);
-    printf(" esc - Exit to Menu\n\r");
+    pc.printf(" esc - Exit to Menu \n\r\n\r");
     wait_us(10);
     }
     
@@ -434,7 +432,7 @@ int main() {
     pc.attach(&serial_interrupt);        // attach serial interrupt
 
     // attach main interrupt here
-    send_data.attach_us(&send_new_data,10000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
+    send_data.attach_us(&send_new_data,100000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
 
     t.reset();
     t.start();
