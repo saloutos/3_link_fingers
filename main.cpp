@@ -15,11 +15,11 @@
 #define PRINT_TOF_MODE      3
 #define CAN_MODE            4
 
-#define CAN_ID              3
-#define CAN_FORCE_1         10
-#define CAN_FORCE_2         11
-#define CAN_TOF_1           12
-#define CAN_TOF_2           13
+#define CAN_ID              0
+#define CAN_FORCE_1         9
+#define CAN_FORCE_2         10
+#define CAN_TOF_1           11
+#define CAN_TOF_2           12
 
 // new limits for force sensors, need to test these!
 #define FT_MIN -20.0f
