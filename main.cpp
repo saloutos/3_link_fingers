@@ -15,7 +15,7 @@
 #define PRINT_TOF_MODE      3
 #define CAN_MODE            4
 
-#define CAN_ID              0
+#define CAN_ID              1
 #define CAN_FORCE_1         9
 #define CAN_FORCE_2         10
 #define CAN_TOF_1           11
@@ -30,7 +30,6 @@
 #define ANG_MAX 45.0f
 #define RNG_MAX 255 // this probably won't be necessary
 
-
 RawSerial pc(USBTX, USBRX, 921600); //460800);
 DigitalOut led(LED1);
 
@@ -44,7 +43,6 @@ volatile char           serial_input;
 CAN can(PB_8, PB_9, 1000000);
 CANMessage rxMsg;
 CANMessage txMsg_t1, txMsg_t2, txMsg_f1, txMsg_f2; // ToF and force for each finger
-
 
 // Left finger force sensor
 SPI spi1(PB_15, PB_14, PB_13); // MOSI, MISO, SCK
@@ -103,9 +101,9 @@ float range_m[9]; // range in m
 float range_m_raw[9]; // range in m, non-filtered
 int range_status[9];
 int range_mode[9];
-int range_offsets[] = {4, 8, 9, 10, 5, 0, 0, 10, 3}; // offsets in mm to be added to range measurements
+int range_offsets[] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; //{4, 8, 9, 10, 5, 0, 0, 10, 3}; // offsets in mm to be added to range measurements
 uint8_t MUX_ADDR = (0x70<<1);
-uint16_t range_period = 30;
+uint16_t range_period = 50; //30;
 float filt_coef = 0.70f;
 
 // timer stuff
@@ -246,9 +244,7 @@ void serial_interrupt(void){
 int main() {
     
     // start up
-
-    // wait(3.0);
-    wait_us(50000);
+    wait_us(500000);
 
     pc.printf("Initializing.\n\r");
     
@@ -296,7 +292,7 @@ int main() {
     }
     wait_us(10000);
 
-
+    
     pc.printf("Sensor 3...\n\r");
     set_mux2(4); // channel 4 on mux 2
     wait_us(1000);
@@ -432,7 +428,7 @@ int main() {
     pc.attach(&serial_interrupt);        // attach serial interrupt
 
     // attach main interrupt here
-    send_data.attach_us(&send_new_data,100000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
+    send_data.attach_us(&send_new_data,50); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
 
     t.reset();
     t.start();
@@ -504,10 +500,43 @@ int main() {
             left_finger.Sample();
             left_finger.Evaluate();
             wait_us(10);
+
+            // check CAN mailboxes here too
+            if(can.read(rxMsg)){
+                if(rxMsg.id == CAN_ID){     
+                    // Enable message
+                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+                        state = CAN_MODE;
+                        pc.printf("Entering CAN mode.\n\r");
+                        }
+                    // Disable message
+                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+                        state = REST_MODE;
+                        pc.printf("Entering rest mode.\n\r");
+                        }
+                }
+            }
+
             right_finger.Sample();
             right_finger.Evaluate();
             wait_us(10);
             samp0 = t2.read_us();
+
+            // check CAN mailboxes here too
+            if(can.read(rxMsg)){
+                if(rxMsg.id == CAN_ID){     
+                    // Enable message
+                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+                        state = CAN_MODE;
+                        pc.printf("Entering CAN mode.\n\r");
+                        }
+                    // Disable message
+                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+                        state = REST_MODE;
+                        pc.printf("Entering rest mode.\n\r");
+                        }
+                }
+            }
 
             // get data from TOF sensor
             t2.reset(); // reading all of the continuous range measurements takes about 2ms with current wait times
@@ -545,7 +574,7 @@ int main() {
                 wait_us(10);
                 range[2] = tof3.readRangeResult();
                 wait_us(10);
-            }
+            } 
             set_mux2(5);
             if (tof4.isRangeComplete()){
                 // if it is ready, get range status, mode, and result
@@ -568,7 +597,6 @@ int main() {
                 range[4] = tof5.readRangeResult();
                 wait_us(10);
             }
-
             samp1 = t2.read_us();
 
             t2.reset();
@@ -635,8 +663,26 @@ int main() {
                 }
             }    
 
+            // check CAN mailboxes here too
+            if(can.read(rxMsg)){
+                if(rxMsg.id == CAN_ID){     
+                    // Enable message
+                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+                        state = CAN_MODE;
+                        pc.printf("Entering CAN mode.\n\r");
+                        }
+                    // Disable message
+                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+                        state = REST_MODE;
+                        pc.printf("Entering rest mode.\n\r");
+                        }
+                }
+            }
+
+
             // check CAN mode
             if (state==CAN_MODE){
+                t2.reset();
                 // pack CAN messages
                 pack_force_reply(&txMsg_f1, &left_finger);
                 pack_force_reply(&txMsg_f2, &right_finger);
@@ -651,6 +697,7 @@ int main() {
                 wait_us(100);
                 can.write(txMsg_t2);
                 wait_us(100);
+                samp3 = t2.read_us();
             }          
             if (state==PRINT_RAW_MODE){
                 // printing raw data from all 3 sensors takes 0.001722 seconds
@@ -672,7 +719,7 @@ int main() {
             }
             if (state==PRINT_TOF_MODE){
                 // printing raw data from ToF sensors
-                pc.printf("%3.4f,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+                pc.printf("%3.4f,%d,  %03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), samp0+samp1+samp2+samp3, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
             }
 
             samp5 = t.read_us();
