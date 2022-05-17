@@ -145,6 +145,11 @@ void VL6180X::loadSettings(void) {
                         // to 500ms
   write8(0x0014, 0x24); // Configures interrupt on 'New Sample
                         // Ready threshold event'
+
+  write8(0x001C, 0x20); // Setting SYSRANGE_MAX_CONVERGENCE_TIME to obey inequality on pg. 22
+
+
+
 }
 
 /**************************************************************************/

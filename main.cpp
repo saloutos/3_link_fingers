@@ -248,8 +248,8 @@ int main() {
 
     pc.printf("Initializing.\n\r");
     
-    i2c1.frequency(400000); // set bus freq
-    i2c2.frequency(400000); 
+    i2c1.frequency(300000); // set bus freq
+    i2c2.frequency(300000); 
     
     left_finger.Initialize();
     left_finger.Calibrate();
@@ -428,7 +428,7 @@ int main() {
     pc.attach(&serial_interrupt);        // attach serial interrupt
 
     // attach main interrupt here
-    send_data.attach_us(&send_new_data,50); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
+    send_data.attach_us(&send_new_data,5000); // 5000us = 5ms => 200Hz (10000 = 10 ms = 100 Hz)
 
     t.reset();
     t.start();
@@ -719,7 +719,9 @@ int main() {
             }
             if (state==PRINT_TOF_MODE){
                 // printing raw data from ToF sensors
-                pc.printf("%3.4f,%d,  %03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", t3.read(), samp0+samp1+samp2+samp3, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+                pc.printf("%3.4f,%d,  %03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d,%03d\n\r", 
+                            t3.read(), samp0+samp1+samp2, range[0], range[1], range[2], range[3], range[4], range[5], range[6], range[7], range[8]);
+                        
             }
 
             samp5 = t.read_us();
