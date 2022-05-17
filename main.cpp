@@ -101,7 +101,7 @@ float range_m[9]; // range in m
 float range_m_raw[9]; // range in m, non-filtered
 int range_status[9];
 int range_mode[9];
-int range_offsets[] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; //{4, 8, 9, 10, 5, 0, 0, 10, 3}; // offsets in mm to be added to range measurements
+int range_offsets[] = {8, -2, 5, 8, 2, -8, -12, 5, 0}; // offsets in mm to be added to range measurements
 uint8_t MUX_ADDR = (0x70<<1);
 uint16_t range_period = 50; //30;
 float filt_coef = 0.70f;
@@ -551,6 +551,7 @@ int main() {
                 // range_mode[0] = tof1.readRangeMode();
                 wait_us(10);
                 range[0] = tof1.readRangeResult();
+                if (range[0]<255) { range[0] = range[0] + range_offsets[0]; }
                 wait_us(10);
             }
             set_mux2(3);
@@ -562,6 +563,7 @@ int main() {
                 // range_mode[1] = tof2.readRangeMode();
                 wait_us(10);
                 range[1] = tof2.readRangeResult();
+                if (range[1]<255) { range[1] = range[1] + range_offsets[1]; }
                 wait_us(10);
             }
             set_mux2(4);
@@ -573,6 +575,7 @@ int main() {
                 // range_mode[2] = tof3.readRangeMode();
                 wait_us(10);
                 range[2] = tof3.readRangeResult();
+                if (range[2]<255) { range[2] = range[2] + range_offsets[2]; }
                 wait_us(10);
             } 
             set_mux2(5);
@@ -584,6 +587,7 @@ int main() {
                 // range_mode[3] = tof4.readRangeMode();
                 wait_us(10);
                 range[3] = tof4.readRangeResult();
+                if (range[3]<255) { range[3] = range[3] + range_offsets[3]; }
                 wait_us(10);
             }
             set_mux2(6);
@@ -595,6 +599,7 @@ int main() {
                 // range_mode[4] = tof5.readRangeMode();
                 wait_us(10);
                 range[4] = tof5.readRangeResult();
+                if (range[4]<255) { range[4] = range[4] + range_offsets[4]; }
                 wait_us(10);
             }
             samp1 = t2.read_us();
@@ -609,6 +614,7 @@ int main() {
                 // range_mode[5] = tof6.readRangeMode();
                 wait_us(10);
                 range[5] = tof6.readRangeResult();
+                if (range[5]<255) { range[5] = range[5] + range_offsets[5]; }
                 wait_us(10);
             }
             set_mux1(2);
@@ -620,6 +626,7 @@ int main() {
                 // range_mode[6] = tof7.readRangeMode();
                 wait_us(10);
                 range[6] = tof7.readRangeResult();
+                if (range[6]<255) { range[6] = range[6] + range_offsets[6]; }
                 wait_us(10);
             }
             set_mux1(4);
@@ -631,6 +638,7 @@ int main() {
                 // range_mode[7] = tof8.readRangeMode();
                 wait_us(10);
                 range[7] = tof8.readRangeResult();
+                if (range[7]<255) { range[7] = range[7] + range_offsets[7]; }
                 wait_us(10);
             }
             set_mux1(5);
@@ -642,26 +650,27 @@ int main() {
                 // range_mode[8] = tof9.readRangeMode();
                 wait_us(10);
                 range[8] = tof9.readRangeResult();
+                if (range[8]<255) { range[8] = range[8] + range_offsets[8]; }
                 wait_us(10);
             }
             samp2 = t2.read_us();
 
-            // convert range measurements to meters and do some filtering
-            for(int i=0; i<9; i++){
-                if (range_status[i]==0){ // good measurement
-                    if (range_m[i]==0.0f){ //==0.2f
-                        range_m[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
+            // // convert range measurements to meters and do some filtering
+            // for(int i=0; i<9; i++){
+            //     if (range_status[i]==0){ // good measurement
+            //         if (range_m[i]==0.0f){ //==0.2f
+            //             range_m[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
 
-                    } else {
-                        range_m[i] = filt_coef*(((float)(range[i]+ range_offsets[i]))/1000.0f) + (1.0f-filt_coef)*range_m[i];
-                    }
-                    range_m_raw[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
-                } else {
-                    range[i] = 255;
-                    range_m[i] = 0.2f;
-                    range_m_raw[i] = 0.2f;
-                }
-            }    
+            //         } else {
+            //             range_m[i] = filt_coef*(((float)(range[i]+ range_offsets[i]))/1000.0f) + (1.0f-filt_coef)*range_m[i];
+            //         }
+            //         range_m_raw[i] = ((float)(range[i]+ range_offsets[i]))/1000.0f;
+            //     } else {
+            //         range[i] = 255;
+            //         range_m[i] = 0.2f;
+            //         range_m_raw[i] = 0.2f;
+            //     }
+            // }    
 
             // check CAN mailboxes here too
             if(can.read(rxMsg)){
