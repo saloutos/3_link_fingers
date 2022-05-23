@@ -132,7 +132,7 @@ void set_mux2(uint8_t channel){
 }
 
 // setup for state machine and sensor interrupts
-volatile int state = REST_MODE;
+volatile int state = CAN_MODE; //REST_MODE;
 volatile int send_data_flag = 0;
 Timer timer;
 float cur_time;
@@ -251,6 +251,11 @@ int main() {
     i2c1.frequency(300000); // set bus freq
     i2c2.frequency(300000); 
     
+    spi1.frequency(4000000); // set bus freq (could go up to 10MHz in theory)
+    spi2.frequency(4000000); 
+    wait_us(100);
+
+
     left_finger.Initialize();
     left_finger.Calibrate();
     wait_us(10000);
@@ -472,23 +477,23 @@ int main() {
             serial_flag = false;
         }
 
-        if(can.read(rxMsg)){
+        // if(can.read(rxMsg)){
             
-            if(rxMsg.id == CAN_ID){
+        //     if(rxMsg.id == CAN_ID){
                     
-                // Enable message
-                if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
-                    state = CAN_MODE;
-                    pc.printf("Entering CAN mode.\n\r");
-                    }
-                // Disable message
-                else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
-                    state = REST_MODE;
-                    pc.printf("Entering rest mode.\n\r");
-                    }
-            }
+        //         // Enable message
+        //         if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+        //             state = CAN_MODE;
+        //             pc.printf("Entering CAN mode.\n\r");
+        //             }
+        //         // Disable message
+        //         else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+        //             state = REST_MODE;
+        //             pc.printf("Entering rest mode.\n\r");
+        //             }
+        //     }
 
-        }
+        // }
 
         if(send_data_flag==1){
 
@@ -501,42 +506,42 @@ int main() {
             left_finger.Evaluate();
             wait_us(10);
 
-            // check CAN mailboxes here too
-            if(can.read(rxMsg)){
-                if(rxMsg.id == CAN_ID){     
-                    // Enable message
-                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
-                        state = CAN_MODE;
-                        pc.printf("Entering CAN mode.\n\r");
-                        }
-                    // Disable message
-                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
-                        state = REST_MODE;
-                        pc.printf("Entering rest mode.\n\r");
-                        }
-                }
-            }
+            // // check CAN mailboxes here too
+            // if(can.read(rxMsg)){
+            //     if(rxMsg.id == CAN_ID){     
+            //         // Enable message
+            //         if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+            //             state = CAN_MODE;
+            //             pc.printf("Entering CAN mode.\n\r");
+            //             }
+            //         // Disable message
+            //         else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+            //             state = REST_MODE;
+            //             pc.printf("Entering rest mode.\n\r");
+            //             }
+            //     }
+            // }
 
             right_finger.Sample();
             right_finger.Evaluate();
             wait_us(10);
             samp0 = t2.read_us();
 
-            // check CAN mailboxes here too
-            if(can.read(rxMsg)){
-                if(rxMsg.id == CAN_ID){     
-                    // Enable message
-                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
-                        state = CAN_MODE;
-                        pc.printf("Entering CAN mode.\n\r");
-                        }
-                    // Disable message
-                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
-                        state = REST_MODE;
-                        pc.printf("Entering rest mode.\n\r");
-                        }
-                }
-            }
+            // // check CAN mailboxes here too
+            // if(can.read(rxMsg)){
+            //     if(rxMsg.id == CAN_ID){     
+            //         // Enable message
+            //         if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+            //             state = CAN_MODE;
+            //             pc.printf("Entering CAN mode.\n\r");
+            //             }
+            //         // Disable message
+            //         else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+            //             state = REST_MODE;
+            //             pc.printf("Entering rest mode.\n\r");
+            //             }
+            //     }
+            // }
 
             // get data from TOF sensor
             t2.reset(); // reading all of the continuous range measurements takes about 2ms with current wait times
@@ -672,21 +677,21 @@ int main() {
             //     }
             // }    
 
-            // check CAN mailboxes here too
-            if(can.read(rxMsg)){
-                if(rxMsg.id == CAN_ID){     
-                    // Enable message
-                    if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
-                        state = CAN_MODE;
-                        pc.printf("Entering CAN mode.\n\r");
-                        }
-                    // Disable message
-                    else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
-                        state = REST_MODE;
-                        pc.printf("Entering rest mode.\n\r");
-                        }
-                }
-            }
+            // // check CAN mailboxes here too
+            // if(can.read(rxMsg)){
+            //     if(rxMsg.id == CAN_ID){     
+            //         // Enable message
+            //         if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) & (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFC))){
+            //             state = CAN_MODE;
+            //             pc.printf("Entering CAN mode.\n\r");
+            //             }
+            //         // Disable message
+            //         else if(((rxMsg.data[0]==0xFF) & (rxMsg.data[1]==0xFF) & (rxMsg.data[2]==0xFF) & (rxMsg.data[3]==0xFF) * (rxMsg.data[4]==0xFF) & (rxMsg.data[5]==0xFF) & (rxMsg.data[6]==0xFF) & (rxMsg.data[7]==0xFD))){
+            //             state = REST_MODE;
+            //             pc.printf("Entering rest mode.\n\r");
+            //             }
+            //     }
+            // }
 
 
             // check CAN mode

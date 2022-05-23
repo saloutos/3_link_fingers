@@ -217,21 +217,20 @@ void ForceSensor::Evaluate(){
     
 void ForceSensor::Calibrate(){
     
-    float temp_offsets[8] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    int samps = 10;
-    
-//    for (int i=0; i<samps; i++){
-//        for (int j=0; j<8; j++){
-//            temp_offsets[j] += (float)spi3.binary(j);
-//        }
-//        wait_ms(1);
-//    }
-//    
-//    for (int i=0; i<8; i++){
-//        temp_offsets[i] = temp_offsets[i]/((float)samps); // get overall offset
-//        offsets[i] = (uint16_t)temp_offsets[i]; // convert to int
-//    }
-    
+    printf("Calculating sensor offsets.\r\n");
+    int samps = 500;
+    float temp_offsets[8];
+    for (int i=0; i<samps; i++){
+        Sample();
+        for (int j=0; j<8; j++){
+            temp_offsets[j] += ((float)raw_data[j])/((float)samps);
+        }
+        wait_us(5000); // wait for 1/200 s
+    }
+    for (int i=0; i<8; i++){
+        offsets[i] = (int)temp_offsets[i];
+    }
+
 } 
     
     
